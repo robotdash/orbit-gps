@@ -27,6 +27,9 @@ region (with its outlines, used by the app to pick which region routes a trip) t
 `regions.json` (apps up to 3.3, one region at a time) keeps only BC so older apps can't swap
 their BC maps for another region by accident.
 
+After each publish, builds older than the previous one are deleted (`publish_region.py --prune`), so
+storage stays at about two builds (~$2–3/month for all of Canada + US).
+
 GitHub: `.github/workflows/regions.yml` runs this monthly for `tools/regions.txt`
 (`latest_sources.py` picks the newest Protomaps and Overture releases).
 

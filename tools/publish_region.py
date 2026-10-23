@@ -4,7 +4,9 @@
   python3 publish_region.py --merge entry1.json entry2.json ...
     --entry-only  upload the files and write WORKDIR/CODE/entry.json, but leave regions.json alone
                   (GitHub builds many regions at once; one job merges their entries at the end)
-    --merge       put saved entries into the live regions.json (and upload it)
+    --merge       put saved entries into the live catalog (and upload it), then delete builds
+                  older than the previous one
+  python3 publish_region.py --prune ab wa [--dry-run]   only the clean-up
 Environment: CF_API_TOKEN (R2 edit), CF_ACCOUNT_ID, R2_BUCKET (default orbitgps-maps).
 
 Follows the publishing rule: every kind published goes, with all its parts, into a new folder
@@ -81,7 +83,9 @@ def main():
     ap.add_argument("region_dir", nargs="?"); ap.add_argument("--id"); ap.add_argument("--kinds")
     ap.add_argument("--description"); ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--entry-only", action="store_true"); ap.add_argument("--merge", nargs="+")
+    ap.add_argument("--prune", nargs="+", metavar="ID", help="only delete old builds of these regions")
     a = ap.parse_args()
+    if a.prune: return prune(a.prune, [fetch_catalog()], a.dry_run)
     if a.merge: return merge([json.load(open(p)) for p in a.merge], a.dry_run)
     area = json.load(open(os.path.join(a.region_dir, "area.json")))
     rid = a.id or area["code"].lower()
@@ -119,6 +123,7 @@ def main():
 
 def merge(entries, dry_run=False):
     cat = fetch_catalog()
+    before = json.loads(json.dumps(cat))          # the catalog phones had until now
     regions = cat["regions"]
     for e in entries:
         e = {k: v for k, v in e.items() if k != "published"}
@@ -137,6 +142,44 @@ def merge(entries, dry_run=False):
     if dry_run: print(f"dry run: {CATALOG} written locally only"); return
     api(CATALOG, text, "application/json")
     verify(entries)
+    prune([e["id"] for e in entries], [before, cat])
+
+
+def r2_list(prefix):
+    """Keys and sizes under prefix in the bucket."""
+    acct, tok = os.environ["CF_ACCOUNT_ID"], os.environ["CF_API_TOKEN"]
+    bucket = os.environ.get("R2_BUCKET", "orbitgps-maps")
+    out, cursor = [], None
+    while True:
+        q = f"prefix={prefix}&per_page=1000" + (f"&cursor={cursor}" if cursor else "")
+        req = urllib.request.Request(f"https://api.cloudflare.com/client/v4/accounts/{acct}/r2/buckets/{bucket}/objects?{q}",
+                                     headers={"Authorization": f"Bearer {tok}"})
+        r = json.load(urllib.request.urlopen(req, timeout=60))
+        out += [(o["key"], o.get("size", 0)) for o in r.get("result", [])]
+        cursor = (r.get("result_info") or {}).get("cursor")
+        if not cursor or not (r.get("result_info") or {}).get("is_truncated"): return out
+
+
+def prune(region_ids, catalogs, dry_run=False):
+    """
+    Delete old builds of these regions: files that neither the new catalog nor the one before it
+    (phones may be partway through downloading it) nor the old regions.json (apps up to 3.3)
+    point at. Keeps storage at about two builds' worth.
+    """
+    keep = {f["url"] for c in catalogs for r in c["regions"] for f in r["files"]}
+    try:
+        req = urllib.request.Request(BASE + f"regions.json?t={int(time.time())}", headers={"User-Agent": AGENT})
+        keep |= {f["url"] for r in json.load(urllib.request.urlopen(req, timeout=60))["regions"] for f in r["files"]}
+    except Exception as e:
+        print("prune skipped: couldn't read regions.json:", e); return
+    freed = 0
+    for rid in region_ids:
+        for key, size in r2_list(f"regions/{rid}/"):
+            if key in keep: continue
+            print(("would delete " if dry_run else "delete ") + key, flush=True)
+            if not dry_run: api(key, method="DELETE")
+            freed += size
+    print(f"old builds removed: {freed / 1e9:.1f} GB")
 
 
 def verify(entries):

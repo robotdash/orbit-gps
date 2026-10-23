@@ -53,6 +53,12 @@ jobs:
           echo "graph=$(jq -c .graph list.json)" >> "$GITHUB_OUTPUT"
           echo "graph_codes=$(jq -r '[.graph[].code] | join(" ")' list.json)" >> "$GITHUB_OUTPUT"
           cat list.json
+      - name: Check the Cloudflare key (fail now, not after hours of building)
+        if: github.event.inputs.publish != 'false'
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: python3 tools/publish_region.py --check
       - id: s
         run: |
           echo "sources=$(python3 tools/latest_sources.py | paste -sd' ')" >> "$GITHUB_OUTPUT"
@@ -81,21 +87,43 @@ jobs:
           tools/build_graph.sh /mnt/work ${{ needs.plan.outputs.graph_id }} ${{ needs.plan.outputs.graph_codes }} 2>&1 \
             | grep -v "admin_access.admin_id"
           df -h /mnt; free -g
+      - name: Keep the pieces (so a failed upload can be re-run without rebuilding)
+        run: |
+          mkdir -p pieces
+          for c in ${{ needs.plan.outputs.graph_codes }}; do
+            mkdir -p pieces/$c/out && cp /mnt/work/$c/*.json /mnt/work/$c/*.geojson pieces/$c/ && mv /mnt/work/$c/out/routing.tar pieces/$c/out/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: road-pieces
+          path: pieces/
+          retention-days: 7
+          compression-level: 0
+
+  roads-publish:
+    needs: [plan, roads]
+    if: ${{ github.event.inputs.publish != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: road-pieces
+          path: pieces
       - name: Upload routing pieces
-        if: github.event.inputs.publish != 'false'
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           LIST: ${{ needs.plan.outputs.graph }}
         run: |
+          pip install --quiet shapely
           mkdir -p entries
           for row in $(echo "$LIST" | jq -c '.[]'); do
             code=$(echo "$row" | jq -r .code); id=$(echo "$row" | jq -r .id)
-            python3 tools/publish_region.py /mnt/work/$code --id $id --kinds routing --graph ${{ needs.plan.outputs.graph_id }} --entry-only
-            cp /mnt/work/$code/entry.json entries/entry-$code-routing.json
+            python3 tools/publish_region.py pieces/$code --id $id --kinds routing --graph ${{ needs.plan.outputs.graph_id }} --entry-only
+            cp pieces/$code/entry.json entries/entry-$code-routing.json
           done
       - uses: actions/upload-artifact@v4
-        if: github.event.inputs.publish != 'false'
         with:
           name: entries-roads
           path: entries/
@@ -140,7 +168,7 @@ jobs:
           path: entries/
 
   catalog:
-    needs: [roads, build]
+    needs: [roads-publish, build]
     if: ${{ always() && github.event.inputs.publish != 'false' }}
     runs-on: ubuntu-latest
     steps:

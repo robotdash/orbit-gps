@@ -23,8 +23,33 @@ FILES = {"map": ("map.pmtiles", False), "routing": ("routing.tar", False), "sear
          "terrain": ("terrain.pmtiles", True), "contours": ("contours.pmtiles", True)}
 
 
+def key():
+    """The Cloudflare account and token from the environment, checked."""
+    acct, tok = os.environ.get("CF_ACCOUNT_ID", "").strip(), os.environ.get("CF_API_TOKEN", "").strip()
+    if not acct or not tok:
+        sys.exit("CF_ACCOUNT_ID and CF_API_TOKEN must be set (GitHub: Settings → Secrets and variables → Actions)")
+    if any(c.isspace() for c in tok) or any(c.isspace() for c in acct):
+        sys.exit("CF_API_TOKEN or CF_ACCOUNT_ID has more than one line or a space in it. Edit the GitHub secret "
+                 "and paste only the token (one line, nothing before or after it).")
+    return acct, tok
+
+
+def check_key():
+    """Fail early with a clear message if the key can't write to the bucket."""
+    acct, tok = key()
+    bucket = os.environ.get("R2_BUCKET", "orbitgps-maps")
+    req = urllib.request.Request(f"https://api.cloudflare.com/client/v4/accounts/{acct}/r2/buckets/{bucket}/objects?per_page=1",
+                                 headers={"Authorization": f"Bearer {tok}"})
+    try:
+        ok = json.load(urllib.request.urlopen(req, timeout=60)).get("success")
+    except urllib.error.HTTPError as e:
+        ok = False; print("Cloudflare said", e.code, e.read()[:300])
+    if not ok: sys.exit("The Cloudflare key doesn't give access to the map bucket: check CF_API_TOKEN / CF_ACCOUNT_ID.")
+    print("Cloudflare key OK")
+
+
 def api(path, data=None, ctype="application/octet-stream", method="PUT"):
-    acct, tok = os.environ["CF_ACCOUNT_ID"], os.environ["CF_API_TOKEN"]
+    acct, tok = key()
     bucket = os.environ.get("R2_BUCKET", "orbitgps-maps")
     url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/r2/buckets/{bucket}/objects/{path}"
     for t in range(5):
@@ -85,7 +110,9 @@ def main():
     ap.add_argument("--entry-only", action="store_true"); ap.add_argument("--merge", nargs="+")
     ap.add_argument("--prune", nargs="+", metavar="ID", help="only delete old builds of these regions")
     ap.add_argument("--graph", help="the joint road-network build this routing.tar is a piece of")
+    ap.add_argument("--check", action="store_true", help="only check the Cloudflare key")
     a = ap.parse_args()
+    if a.check: return check_key()
     if a.prune: return prune(a.prune, [fetch_catalog()], a.dry_run)
     if a.merge: return merge([json.load(open(p)) for p in a.merge], a.dry_run)
     area = json.load(open(os.path.join(a.region_dir, "area.json")))
@@ -157,7 +184,7 @@ def merge(entries, dry_run=False):
 
 def r2_list(prefix):
     """Keys and sizes under prefix in the bucket."""
-    acct, tok = os.environ["CF_ACCOUNT_ID"], os.environ["CF_API_TOKEN"]
+    acct, tok = key()
     bucket = os.environ.get("R2_BUCKET", "orbitgps-maps")
     out, cursor = [], None
     while True:

@@ -22,13 +22,23 @@ import java.security.MessageDigest
  */
 object RegionDownloads {
     const val BASE = "https://maps.orbitgps.ca/"
-    /** 3.4+ (several regions): regions-v2.json. Older apps read regions.json, which lists only BC so
-     *  they can't replace their BC maps with another region by accident. */
-    private const val CATALOG = BASE + "regions-v2.json"
+    /**
+     * 3.6+: regions-v3.json (routing and search files gzipped, about a third the download).
+     * 3.4–3.5 read regions-v2.json (plain files; frozen), up to 3.3 regions.json (BC only).
+     */
+    private const val CATALOG = BASE + "regions-v3.json"
     /** Cloudflare turns away some generic agents, so say who we are. */
     private val AGENT = "OrbitGPS/${BuildConfig.VERSION_NAME} (Android)"
 
-    data class RegionFile(val kind: String, val name: String, val url: String, val size: Long, val sha256: String, val optional: Boolean)
+    /** [size] and [sha256] are of the download; [gz]: gzipped (pieces of one gzip file), [rawSize] unpacked. */
+    data class RegionFile(val kind: String, val name: String, val url: String, val size: Long, val sha256: String, val optional: Boolean,
+                          val gz: Boolean = false, val rawSize: Long = 0) {
+        /** Space it takes once installed. */
+        val installedSize: Long get() = if (gz) rawSize else size
+    }
+
+    private fun fileOf(f: JSONObject) = RegionFile(f.getString("kind"), f.getString("name"), f.getString("url"), f.getLong("size"),
+        f.getString("sha256"), f.optBoolean("optional", false), f.optBoolean("gz", false), f.optLong("rawSize", 0))
 
     /**
      * [area]: the region + 50 km (what its files cover); [core]: the province/state itself.
@@ -50,11 +60,7 @@ object RegionDownloads {
             val fa = r.getJSONArray("files")
             Region(
                 r.getString("id"), r.getString("name"), r.optString("description"), r.getString("built"),
-                (0 until fa.length()).map { j ->
-                    val f = fa.getJSONObject(j)
-                    RegionFile(f.getString("kind"), f.getString("name"), f.getString("url"), f.getLong("size"),
-                        f.getString("sha256"), f.optBoolean("optional", false))
-                },
+                (0 until fa.length()).map { j -> fileOf(fa.getJSONObject(j)) },
                 r.optJSONObject("area")?.let { Outline.fromGeoJson(it) },
                 r.optJSONObject("core")?.let { Outline.fromGeoJson(it) },
             )
@@ -175,11 +181,7 @@ object RegionDownloads {
             val o = JSONObject(s)
             val fa = o.getJSONArray("files")
             Job(o.getString("id"), o.getString("name"), o.getString("built"), o.getBoolean("topo"),
-                (0 until fa.length()).map { i ->
-                    val f = fa.getJSONObject(i)
-                    RegionFile(f.getString("kind"), f.getString("name"), f.getString("url"), f.getLong("size"),
-                        f.getString("sha256"), f.optBoolean("optional")) to f.getLong("dm")
-                })
+                (0 until fa.length()).map { i -> fa.getJSONObject(i).let { f -> fileOf(f) to f.getLong("dm") } })
         }.getOrNull()
     }
 
@@ -188,7 +190,7 @@ object RegionDownloads {
         val fa = JSONArray()
         j.files.forEach { (f, id) ->
             fa.put(JSONObject().put("kind", f.kind).put("name", f.name).put("url", f.url).put("size", f.size)
-                .put("sha256", f.sha256).put("optional", f.optional).put("dm", id))
+                .put("sha256", f.sha256).put("optional", f.optional).put("gz", f.gz).put("rawSize", f.rawSize).put("dm", id))
         }
         prefs(ctx).edit().putString("job", JSONObject().put("id", j.regionId).put("name", j.regionName)
             .put("built", j.built).put("topo", j.withTopo).put("files", fa).toString()).apply()
@@ -311,7 +313,8 @@ object RegionDownloads {
             check(sha256(file) == f.sha256) { ctx.getString(R.string.dl_damaged, f.name) }
             progress(i * 30 / files.size)
         }
-        val kinds = OfflineMaps.import(ctx, files.map { Uri.fromFile(it.second) }, { pct -> progress(30 + pct * 70 / 100) },
+        val ready = unpack(d, files) { pct -> progress(30 + pct * 30 / 100) }
+        val kinds = OfflineMaps.import(ctx, ready.map { Uri.fromFile(it) }, { pct -> progress(60 + pct * 40 / 100) },
             region = j.regionId).getOrThrow()
         val e = prefs(ctx).edit()
         // Record exactly which files are now installed (replacing those of the same kinds).
@@ -334,6 +337,37 @@ object RegionDownloads {
         d.deleteRecursively()
         saveJob(ctx, null)
         kinds
+    }
+
+    /**
+     * Gzipped downloads (one gzip file in pieces) are joined and unpacked into the plain file, and
+     * the pieces deleted; other files are passed on as they are (OfflineMaps joins their pieces).
+     */
+    internal fun unpack(d: File, files: List<Pair<RegionFile, File>>, progress: (Int) -> Unit): List<File> {
+        val out = files.filter { !it.first.gz }.map { it.second }.toMutableList()
+        val packed = files.filter { it.first.gz }.groupBy { it.first.kind }
+        val total = packed.values.flatten().sumOf { it.first.size }.coerceAtLeast(1)
+        var done = 0L
+        for ((_, group) in packed) {
+            val parts = group.sortedBy { Regex("""\.part(\d+)$""").find(it.first.name)?.groupValues?.get(1)?.toInt() ?: 0 }
+            val name = parts.first().first.name.replace(Regex("""\.gz(\.part\d+)?$"""), "")
+            val dest = File(d, name)
+            val counting = object : java.io.InputStream() {
+                val all = java.io.SequenceInputStream(java.util.Collections.enumeration(parts.map { it.second.inputStream().buffered(1 shl 16) }))
+                override fun read() = all.read().also { if (it >= 0) done++ }
+                override fun read(b: ByteArray, off: Int, len: Int) = all.read(b, off, len).also { if (it > 0) { done += it; progress((done * 100 / total).toInt()) } }
+                override fun close() = all.close()
+            }
+            java.util.zip.GZIPInputStream(counting, 1 shl 16).use { inp ->
+                File(dest.path + ".tmp").outputStream().use { o -> inp.copyTo(o, 1 shl 16) }
+            }
+            val raw = parts.first().first.rawSize
+            check(raw <= 0 || File(dest.path + ".tmp").length() == raw) { "Unpacking ${parts.first().first.name} gave the wrong size." }
+            check(File(dest.path + ".tmp").renameTo(dest)) { "Couldn't save $name" }
+            parts.forEach { it.second.delete() }
+            out += dest
+        }
+        return out
     }
 
     fun sha256(f: File): String {

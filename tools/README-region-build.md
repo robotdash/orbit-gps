@@ -21,9 +21,9 @@ CF_API_TOKEN=... CF_ACCOUNT_ID=... python3 tools/publish_region.py work/CA-AB --
    their own province/state (`areas.geojson`).
 6. Topo: Terrarium terrain z0–11 + contours over the region + 10 km.
 
-`publish_region.py` splits files over 200 MiB, uploads them to `regions/<id>/<date>/`, adds the
+`publish_region.py` gzips routing and search (to ~35% / ~25%; the app unpacks them), splits files over 200 MiB, uploads them to `regions/<id>/<date>/`, adds the
 region (with its outlines, used by the app to pick which region routes a trip) to
-**regions-v2.json** (read by app 3.4+, which holds several regions), and checks the live files.
+**regions-v3.json** (read by app 3.6+; `regions-v2.json` stays frozen for 3.4–3.5), and checks the live files.
 `regions.json` (apps up to 3.3, one region at a time) keeps only BC so older apps can't swap
 their BC maps for another region by accident.
 

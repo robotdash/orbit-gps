@@ -135,4 +135,23 @@ class RegionDownloadsTest {
         assertTrue("current after the update", RegionDownloads.stale(ctx, newer, optional = false).isEmpty())
         assertEquals("2026-10-22", RegionDownloads.installed(ctx, "test"))
     }
+
+    @Test fun gzippedPiecesAreJoinedAndUnpacked() {
+        val d = File(ctx.cacheDir, "gz").apply { deleteRecursively(); mkdirs() }
+        val raw = ByteArray(3_000_000) { (it % 251).toByte() }
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(bos).use { it.write(raw) }
+        val gz = bos.toByteArray()
+        // 11 pieces, to check part10 and part11 come after part2
+        val n = 11; val size = (gz.size + n - 1) / n
+        val files = (0 until n).map { i ->
+            val bytes = gz.copyOfRange(i * size, minOf(gz.size, (i + 1) * size))
+            val f = File(d, "ab-routing.tar.gz.part${i + 1}").apply { writeBytes(bytes) }
+            RegionDownloads.RegionFile("routing", f.name, "u", bytes.size.toLong(), "x", false, gz = true, rawSize = raw.size.toLong()) to f
+        }.shuffled() + (RegionDownloads.RegionFile("map", "ab-map.pmtiles", "u", 5, "x", false) to File(d, "ab-map.pmtiles").apply { writeBytes(ByteArray(5)) })
+        val out = RegionDownloads.unpack(d, files) {}
+        assertEquals(setOf("ab-map.pmtiles", "ab-routing.tar"), out.map { it.name }.toSet())
+        assertTrue(File(d, "ab-routing.tar").readBytes().contentEquals(raw))
+        assertFalse("pieces deleted", File(d, "ab-routing.tar.gz.part1").exists())
+    }
 }

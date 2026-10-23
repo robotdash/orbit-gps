@@ -64,6 +64,21 @@ def api(path, data=None, ctype="application/octet-stream", method="PUT"):
     sys.exit(f"upload failed: {path}")
 
 
+# Routing and search shrink to ~35% and ~25% with gzip; maps and terrain are already compressed inside.
+GZIP = {"routing", "search"}
+
+
+def gzipped(path):
+    """A gzip copy of path next to it (reused if it's newer than path)."""
+    import gzip, shutil
+    gz = path + ".gz"
+    if not (os.path.exists(gz) and os.path.getmtime(gz) >= os.path.getmtime(path)):
+        with open(path, "rb") as src, gzip.open(gz + ".tmp", "wb", compresslevel=6) as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+        os.replace(gz + ".tmp", gz)
+    return gz
+
+
 def pieces(path):
     """(name suffix, bytes) for each piece of the file (one piece if it fits)."""
     size = os.path.getsize(path)
@@ -77,9 +92,13 @@ def pieces(path):
             yield f".part{i}", b; i += 1
 
 
-# Apps up to 3.3 hold one region at a time and read regions.json (BC only, so nobody replaces their
-# maps by accident); apps that hold several regions read regions-v2.json. CATALOG=regions.json to change.
-CATALOG = os.environ.get("CATALOG", "regions-v2.json")
+# Catalogs: regions.json  apps up to 3.3 (one region at a time; BC + Terrace only, frozen)
+#           regions-v2.json  apps 3.4-3.5 (several regions; plain files; frozen Oct 23 2026)
+#           regions-v3.json  apps 3.6+ (routing and search files gzipped: "gz": true)
+# Frozen catalogs stay readable, and the files they list are never pruned.
+CATALOG = os.environ.get("CATALOG", "regions-v3.json")
+OLDER = {"regions-v3.json": "regions-v2.json", "regions-v2.json": "regions.json"}
+FROZEN = ["regions.json", "regions-v2.json"]
 
 
 def outline(path, tolerance=0.01):
@@ -97,9 +116,9 @@ def fetch_catalog():
     try:
         return json.load(urllib.request.urlopen(req, timeout=60))
     except urllib.error.HTTPError as e:
-        if e.code != 404: raise
-        print(f"{CATALOG} isn't there yet: starting it from regions.json")
-        req = urllib.request.Request(BASE + f"regions.json?t={int(time.time())}", headers={"User-Agent": AGENT})
+        if e.code != 404 or CATALOG not in OLDER: raise
+        print(f"{CATALOG} isn't there yet: starting it from {OLDER[CATALOG]}")
+        req = urllib.request.Request(BASE + f"{OLDER[CATALOG]}?t={int(time.time())}", headers={"User-Agent": AGENT})
         return json.load(urllib.request.urlopen(req, timeout=60))
 
 
@@ -128,13 +147,18 @@ def main():
     files = [f for f in (old["files"] if old else []) if f["kind"] not in kinds]
     for kind in kinds:
         fname, optional = FILES[kind]
-        for suffix, data in pieces(os.path.join(out, fname)):
-            name = f"{rid}-{fname}{suffix}"
+        src = os.path.join(out, fname)
+        gz = kind in GZIP
+        upload = gzipped(src) if gz else src
+        for suffix, data in pieces(upload):
+            name = f"{rid}-{fname}{'.gz' if gz else ''}{suffix}"
             url = f"regions/{rid}/{folder}/{name}"
             print(f"{url}  {len(data) / 1e6:.0f} MB", flush=True)
             if not a.dry_run: api(url, data)
-            files.append({"kind": kind, "name": name, "url": url, "size": len(data),
-                          "sha256": hashlib.sha256(data).hexdigest(), "optional": optional})
+            f = {"kind": kind, "name": name, "url": url, "size": len(data),
+                 "sha256": hashlib.sha256(data).hexdigest(), "optional": optional}
+            if gz: f.update(gz=True, rawSize=os.path.getsize(src))     # rawSize: the whole file, unpacked
+            files.append(f)
     order = list(FILES)
     files.sort(key=lambda f: (order.index(f["kind"]), f["name"]))
     w, s, e, n = area["bbox50"]
@@ -200,15 +224,16 @@ def r2_list(prefix):
 def prune(region_ids, catalogs, dry_run=False):
     """
     Delete old builds of these regions: files that neither the new catalog nor the one before it
-    (phones may be partway through downloading it) nor the old regions.json (apps up to 3.3)
+    (phones may be partway through downloading it) nor the frozen catalogs older apps read
     point at. Keeps storage at about two builds' worth.
     """
     keep = {f["url"] for c in catalogs for r in c["regions"] for f in r["files"]}
-    try:
-        req = urllib.request.Request(BASE + f"regions.json?t={int(time.time())}", headers={"User-Agent": AGENT})
-        keep |= {f["url"] for r in json.load(urllib.request.urlopen(req, timeout=60))["regions"] for f in r["files"]}
-    except Exception as e:
-        print("prune skipped: couldn't read regions.json:", e); return
+    for name in FROZEN:          # older apps still read these
+        try:
+            req = urllib.request.Request(BASE + f"{name}?t={int(time.time())}", headers={"User-Agent": AGENT})
+            keep |= {f["url"] for r in json.load(urllib.request.urlopen(req, timeout=60))["regions"] for f in r["files"]}
+        except Exception as e:
+            print(f"prune skipped: couldn't read {name}:", e); return
     freed = 0
     for rid in region_ids:
         for key, size in r2_list(f"regions/{rid}/"):

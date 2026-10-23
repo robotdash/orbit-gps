@@ -1907,7 +1907,8 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
             actionLabel = { t -> chosen(t).sumOf { it.size }.takeIf { it > 0 }?.let { getString(R.string.dl_go, RegionDownloads.sizeText(it)) } },
         ) { t ->
             val files = chosen(t)
-            val need = files.sumOf { it.size } * 2 + 200_000_000L // download + installed copy
+            // download + unpacked copy (gzipped files) + installed copy
+            val need = files.sumOf { it.size } + files.sumOf { it.installedSize } * (if (files.any { it.gz }) 2 else 1) + 200_000_000L
             val free = runCatching { filesDir.usableSpace }.getOrDefault(Long.MAX_VALUE)
             if (free < need) {
                 AlertDialog.Builder(this).setTitle(R.string.offline_map)

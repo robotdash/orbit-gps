@@ -62,7 +62,8 @@ jobs:
       - id: s
         run: |
           echo "sources=$(python3 tools/latest_sources.py | paste -sd' ')" >> "$GITHUB_OUTPUT"
-          echo "graph_id=na-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          # unique per build: the app joins road pieces only when this matches exactly
+          echo "graph_id=na-$(date -u +%Y%m%d-%H%M)-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
   roads:
     needs: plan

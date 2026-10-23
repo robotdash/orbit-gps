@@ -37,7 +37,7 @@ def feature(geom, name):
 def main(code, outdir, release="2026-10-21.0"):
     import duckdb
     con = duckdb.connect(); con.sql("INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;")
-    rows = con.execute("""SELECT names."primary", ST_AsWKB(geometry) FROM read_parquet(?)
+    rows = con.execute("""SELECT coalesce(names.common['en'], names."primary"), ST_AsWKB(geometry) FROM read_parquet(?)
                           WHERE subtype = 'region' AND region = ? AND is_land""",
                        [files(release, "divisions", "division_area"), code]).fetchall()
     if not rows: sys.exit(f"no region {code} in Overture {release}")
@@ -50,9 +50,15 @@ def main(code, outdir, release="2026-10-21.0"):
     back = pyproj.Transformer.from_crs(laea, "EPSG:4326", always_xy=True).transform
     m = transform(to, land)
 
+    # Before growing the outline: drop islets under 5 km² and keep ~1 km detail. Nunavut's ~20,000
+    # Arctic islands made the buffer run out of memory (GitHub's runner was shut down); anything
+    # within 50 km of real land is covered anyway. (Tiny regions keep all their parts.)
+    from shapely.geometry import MultiPolygon
+    parts = [p for p in getattr(m, "geoms", [m]) if p.area >= 5e6] or list(getattr(m, "geoms", [m]))
+    coarse = MultiPolygon(parts).simplify(1000)
+
     def buf(km):
-        # simplify the grown outline (small islands and fjords make huge polygons; 1 km detail is plenty)
-        return transform(back, m.buffer(km * 1000, resolution=8).simplify(1000))
+        return transform(back, coarse.buffer(km * 1000, resolution=4).simplify(1000))
 
     os.makedirs(outdir, exist_ok=True)
     out = {"boundary": transform(back, m.simplify(200)), "buf50": buf(50), "buf10": buf(10)}
@@ -60,7 +66,7 @@ def main(code, outdir, release="2026-10-21.0"):
         json.dump(feature(g, name), open(os.path.join(outdir, k + ".geojson"), "w"))
     # Which other provinces/states the 50 km strip reaches (their road data is needed too).
     b = out["buf50"]; bx0, by0, bx1, by1 = b.bounds
-    near = con.execute(f"""SELECT DISTINCT region, ST_AsWKB(geometry), names."primary" FROM read_parquet(?)
+    near = con.execute(f"""SELECT DISTINCT region, ST_AsWKB(geometry), coalesce(names.common['en'], names."primary") FROM read_parquet(?)
         WHERE subtype = 'region' AND is_land AND region <> ? AND country IN ('CA', 'US', 'MX')
           AND bbox.xmax >= {bx0} AND bbox.xmin <= {bx1} AND bbox.ymax >= {by0} AND bbox.ymin <= {by1}""",
         [files(release, "divisions", "division_area"), code]).fetchall()

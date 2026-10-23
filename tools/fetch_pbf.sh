@@ -12,7 +12,7 @@ echo "$U: $S bytes, $N pieces"
 piece() {
   local i=$1 a=$(( $1 * C )) b=$(( ($1 + 1) * C - 1 )); [ $b -ge $S ] && b=$((S - 1))
   for t in 1 2 3 4 5 6 7 8; do
-    curl -sS --max-time 900 -r $a-$b -o "$D/$i" "$U" || true
+    curl -sSL --max-time 900 -r $a-$b -o "$D/$i" "$U" || true
     [ "$(stat -c %s "$D/$i" 2>/dev/null || echo 0)" -eq $((b - a + 1)) ] && return 0
     sleep $((t * 5))
   done

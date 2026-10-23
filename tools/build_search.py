@@ -47,9 +47,10 @@ def mid(nodes):
 
 
 class H(osmium.SimpleHandler):
-    def __init__(self):
+    def __init__(self, osm_addresses=True):
         super().__init__()
         self.places, self.pois, self.addrs, self.streets = [], [], [], {}
+        self.osm_addresses = osm_addresses       # off when an address list replaces OSM's (saves memory)
 
     def _entry(self, tags, loc):
         if loc is None: return
@@ -102,7 +103,7 @@ class H(osmium.SimpleHandler):
         if name and cat:
             self.pois.append((name, cat, loc, street_line, tags.get("addr:city")))
         elif street_line:
-            self.addrs.append((street_line, loc, tags.get("addr:city")))
+            if self.osm_addresses: self.addrs.append((street_line, loc, tags.get("addr:city")))
 
     def node(self, n):
         if not n.tags: return
@@ -165,19 +166,18 @@ def area_of():
 
 
 def bc_address_rows(csv_path):
-    """Official BC addresses (from fetch_bc_addresses.py) as search rows."""
+    """Addresses from fetch_bc_addresses.py / fetch_overture_addresses.py as search rows, one at a
+    time (California has ~13 million; a list of them all would need ~10 GB)."""
     import csv
-    rows = []
     for r in csv.DictReader(open(csv_path)):
         short = r["street_address"]
         words = short.split()
         full = " ".join(STREET_TYPES.get(w, DIRS.get(w, w)) if i > 0 else w for i, w in enumerate(words))
-        rows.append((full, "address", "", r["locality"], float(r["lat"]), float(r["lon"]), 20, short))
-    return rows
+        yield full, "address", "", r["locality"], float(r["lat"]), float(r["lon"]), 20, short
 
 
 def main(pbf, out, bc_csv=None, extras=()):
-    h = H()
+    h = H(osm_addresses=not bc_csv)
     h.apply_file(pbf, locations=True, idx="flex_mem")
     towns = [(n, loc) for n, p, loc, r in h.places if p in ("city", "town", "village", "hamlet")]
 
@@ -228,15 +228,6 @@ def main(pbf, out, bc_csv=None, extras=()):
         before = len(rows)
         rows = [r for r in rows if not dup(r)] + extra_rows
         print(f"extras: +{len(extra_rows)}, replaced {before - (len(rows) - len(extra_rows))} OSM duplicates")
-    extra_search = {}
-    if bc_csv:
-        # Official addresses replace OpenStreetMap's (which are very sparse in northern BC).
-        for full, kind, cat, town, lat, lon, rank, short in bc_address_rows(bc_csv):
-            rows.append((full, kind, cat, town or near_town((lat, lon)), lat, lon, rank))
-            extra_search[len(rows) - 1] = short
-    else:
-        for line, loc, city in h.addrs:
-            rows.append((line, "address", "", city or near_town(loc), loc[0], loc[1], 20))
     # One entry per street per town (long highways get one per town they pass).
     for name, locs in h.streets.items():
         seen = set()
@@ -249,20 +240,34 @@ def main(pbf, out, bc_csv=None, extras=()):
     def town_of(detail):
         return detail.split(",")[-1].strip() if detail and detail not in area_names else ""
     # Searchable text: name, category, town (so "… terrace" works), plus any short form ("Dr").
-    rows = [(fold(" ".join(x for x in (r[0], r[2], town_of(r[3]), extra_search.get(i, "")) if x)),) + r
-            for i, r in enumerate(rows)]
-    db.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", rows)
+    def text(r, short=""):
+        return fold(" ".join(x for x in (r[0], r[2], town_of(r[3]), short) if x))
+    db.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", ((text(r),) + r for r in rows))
+    # Addresses go straight into the database, a batch at a time.
+    if bc_csv:
+        # Official addresses replace OpenStreetMap's (which are very sparse in northern BC).
+        addresses = ((full, kind, cat, town or near_town((lat, lon)), lat, lon, rank, short)
+                     for full, kind, cat, town, lat, lon, rank, short in bc_address_rows(bc_csv))
+    else:
+        addresses = ((line, "address", "", city or near_town(loc), loc[0], loc[1], 20, "") for line, loc, city in h.addrs)
+    n_addr = 0
+    import itertools
+    while True:
+        batch = [(text(a[:7], a[7]),) + a[:7] for a in itertools.islice(addresses, 200_000)]
+        if not batch: break
+        db.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?,?)", batch)
+        n_addr += len(batch)
     db.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
     db.execute("INSERT INTO meta VALUES ('version','2')")
     import datetime
     db.execute("INSERT INTO meta VALUES ('built', ?)", (datetime.date.today().isoformat(),))
-    db.execute("INSERT INTO meta VALUES ('addresses', ?)", (str(sum(1 for r in rows if r[2] == 'address')),))
-    db.execute("INSERT INTO meta VALUES ('rows', ?)", (str(len(rows)),))
+    db.execute("INSERT INTO meta VALUES ('addresses', ?)", (str(n_addr),))
+    db.execute("INSERT INTO meta VALUES ('rows', ?)", (str(len(rows) + n_addr),))
     db.commit()
     db.execute("INSERT INTO places(places) VALUES('optimize')")
     db.commit()
     db.execute("VACUUM")
-    print(f"places={len(h.places)} pois={len(h.pois)} addresses={len(h.addrs)} streets={len(h.streets)} rows={len(rows)}")
+    print(f"places={len(h.places)} pois={len(h.pois)} addresses={n_addr} streets={len(h.streets)} rows={len(rows) + n_addr}")
 
 
 if __name__ == "__main__":

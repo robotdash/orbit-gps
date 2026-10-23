@@ -1,8 +1,69 @@
 # Regions the monthly GitHub build makes:  CODE [id=catalog id] [only=routing]
-#   id=          when the catalog id isn't the code in lower case
-#   only=routing BC's map and search are still built by hand (BC Address Geocoder addresses, BC rec
-#                sites; compare Overture's BC addresses before changing that), but its routing comes
-#                from the joint road network so BC routes join up with the other regions.
-CA-BC id=bc only=routing
-CA-AB id=ab
-US-WA id=wa
+#   id=          catalog id, if not the province/state letters in lower case (CA-AB -> ab)
+#   only=routing GitHub builds only the region's piece of the joint road network
+# BC is built like the others, except its addresses come from the BC Address Geocoder and its rec
+# sites and rest areas from BC open data (build_region.sh).
+# (Washington DC is covered by Maryland's and Virginia's 50 km strips.)
+CA-BC
+CA-AB
+CA-MB
+CA-NB
+CA-NL
+CA-NS
+CA-NT
+CA-NU
+CA-ON
+CA-PE
+CA-QC
+CA-SK
+CA-YT
+US-AK
+US-AL
+US-AR
+US-AZ
+US-CA
+US-CO
+US-CT
+US-DE
+US-FL
+US-GA
+US-HI
+US-IA
+US-ID
+US-IL
+US-IN
+US-KS
+US-KY
+US-LA
+US-MA
+US-MD
+US-ME
+US-MI
+US-MN
+US-MO
+US-MS
+US-MT
+US-NC
+US-ND
+US-NE
+US-NH
+US-NJ
+US-NM
+US-NV
+US-NY
+US-OH
+US-OK
+US-OR
+US-PA
+US-RI
+US-SC
+US-SD
+US-TN
+US-TX
+US-UT
+US-VA
+US-VT
+US-WA
+US-WI
+US-WV
+US-WY

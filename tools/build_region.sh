@@ -66,11 +66,19 @@ fi
 
 # 5. Search: OSM places + Overture addresses (region + 10 km) + Overture businesses OSM lacks
 if [ ! -s "$O/search.db" ]; then
+  EXTRAS=()
+  if [ "$CODE" = CA-BC ]; then
+    # BC: the province's own address list (Overture has only ~85% of it, under 60% in places like
+    # Stewart and Burns Lake) and BC rec sites + rest areas (most of them free camping).
+    [ -s "$R/addresses.csv" ] || { log "addresses (BC Address Geocoder)"; python3 "$T/fetch_bc_addresses.py" "$R/buf10.geojson" "$R/addresses.csv.tmp" && mv "$R/addresses.csv.tmp" "$R/addresses.csv"; }
+    [ -s "$R/rv_extras.csv" ] || { log "BC rec sites and rest areas"; python3 "$T/fetch_bc_rv.py" "$R/buf50.geojson" "$R/rv_extras.csv.tmp" && mv "$R/rv_extras.csv.tmp" "$R/rv_extras.csv"; }
+    EXTRAS+=("$R/rv_extras.csv")
+  fi
   [ -s "$R/addresses.csv" ] || { log "addresses"; python3 "$T/fetch_overture_addresses.py" "$OVERTURE" "$R/buf10.geojson" "$R/addresses.csv.tmp" && mv "$R/addresses.csv.tmp" "$R/addresses.csv"; }
   [ -s "$R/osm_search.db" ] || { log "search (OSM only, to compare businesses)"; ORBIT_AREA="$NAME" ORBIT_AREAS="$R/areas.geojson" python3 "$T/build_search.py" "$R/region.osm.pbf" "$R/osm_search.db" -; }
   [ -s "$R/overture_places.csv" ] || { log "businesses"; python3 "$T/fetch_overture_places.py" "$OVERTURE" "$R/buf50.geojson" "$R/osm_search.db" "$R/overture_places.csv.tmp" && mv "$R/overture_places.csv.tmp" "$R/overture_places.csv"; }
   log "search"
-  ORBIT_AREA="$NAME" ORBIT_AREAS="$R/areas.geojson" python3 "$T/build_search.py" "$R/region.osm.pbf" "$O/search.db.tmp" "$R/addresses.csv" "$R/overture_places.csv" \
+  ORBIT_AREA="$NAME" ORBIT_AREAS="$R/areas.geojson" python3 "$T/build_search.py" "$R/region.osm.pbf" "$O/search.db.tmp" "$R/addresses.csv" "${EXTRAS[@]}" "$R/overture_places.csv" \
     && mv "$O/search.db.tmp" "$O/search.db"
 fi
 

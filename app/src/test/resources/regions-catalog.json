@@ -1,0 +1,216 @@
+{
+ "version": 1,
+ "updated": "2026-10-22",
+ "regions": [
+  {
+   "id": "bc",
+   "name": "British Columbia",
+   "description": "All of BC, plus about 50 km into Alberta, Yukon, Alaska, Washington, Idaho and Montana so routes can cross the border. Includes 1.3 million BC addresses, 140,000 businesses (from Overture Maps), rec sites and rest areas.",
+   "built": "2026-10-22",
+   "center": [
+    54.0,
+    -125.0
+   ],
+   "radiusKm": 900,
+   "files": [
+    {
+     "kind": "contours",
+     "name": "bc-contours.pmtiles",
+     "url": "regions/bc/2026-10-21/bc-contours.pmtiles",
+     "size": 76678678,
+     "sha256": "6263e2ed407e41923c740fac13cf66e3146b18e84d9ae270e204e88885604ac8",
+     "optional": true
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part1",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part1",
+     "size": 209715200,
+     "sha256": "c3afa93b26d28e5e7224454ee27703f7df67c6346498b66a40fbae52284ff627",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part2",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part2",
+     "size": 209715200,
+     "sha256": "e3252858292172012e48abc542b31ea23a5895bc3f0734c7f3d17b4cbc8940d3",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part3",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part3",
+     "size": 209715200,
+     "sha256": "1782212c7dfd73713905d12906a470338fff20f35adad41ba7da53287ae6a76a",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part4",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part4",
+     "size": 209715200,
+     "sha256": "5500c257d453c20862085963ce371d13a980fe2033d02ee0d3a0260f7140cfa1",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part5",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part5",
+     "size": 209715200,
+     "sha256": "695a7f05310cf32f9c96ce253e1daa2a6e459505a20406baf20b81948e44cf48",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "bc-map.pmtiles.part6",
+     "url": "regions/bc/2026-10-21/bc-map.pmtiles.part6",
+     "size": 48866095,
+     "sha256": "8a229548714b70505b76569b2a212ee5f9497f6503a497e8c623adf3cbaf6d8f",
+     "optional": false
+    },
+    {
+     "kind": "routing",
+     "name": "bc-routing.tar.part1",
+     "url": "regions/bc/2026-10-21/bc-routing.tar.part1",
+     "size": 209715200,
+     "sha256": "499e4834a9967e2b37d41b8ace6ac520ac81eb16c8906c968b1358449b700c2e",
+     "optional": false
+    },
+    {
+     "kind": "routing",
+     "name": "bc-routing.tar.part2",
+     "url": "regions/bc/2026-10-21/bc-routing.tar.part2",
+     "size": 151500800,
+     "sha256": "b6c2c2e2898715d1a30c74a7b4cc815b19fffc510c7615a71129561bba849526",
+     "optional": false
+    },
+    {
+     "kind": "terrain",
+     "name": "bc-terrain.pmtiles.part1",
+     "url": "regions/bc/2026-10-21/bc-terrain.pmtiles.part1",
+     "size": 209715200,
+     "sha256": "7b32258ec34cd08e25334cf46717360d979bc287d3d53667e86d44949dff8a2e",
+     "optional": true
+    },
+    {
+     "kind": "terrain",
+     "name": "bc-terrain.pmtiles.part2",
+     "url": "regions/bc/2026-10-21/bc-terrain.pmtiles.part2",
+     "size": 209715200,
+     "sha256": "69f4a77568b2527abaf8fd419ac7ce64d071d4bd2f7469ed12bce9dc548e9cb7",
+     "optional": true
+    },
+    {
+     "kind": "terrain",
+     "name": "bc-terrain.pmtiles.part3",
+     "url": "regions/bc/2026-10-21/bc-terrain.pmtiles.part3",
+     "size": 181336369,
+     "sha256": "957191ace969d7438f3b468e143f9be503edc19a46eb0009160f68588f95fa0e",
+     "optional": true
+    },
+    {
+     "kind": "search",
+     "name": "bc-search.db.part1",
+     "url": "regions/bc/2026-10-22b/bc-search.db.part1",
+     "size": 209715200,
+     "sha256": "077f24aafefc1ac1891e4609d97c30f196159d49bc9f90978818873e527bf38b",
+     "optional": false
+    },
+    {
+     "kind": "search",
+     "name": "bc-search.db.part2",
+     "url": "regions/bc/2026-10-22b/bc-search.db.part2",
+     "size": 60588032,
+     "sha256": "af7333d1064994ab437021dd3c5bdfe398d13af9fc328145790dd10ee6a3d56a",
+     "optional": false
+    }
+   ]
+  },
+  {
+   "id": "terrace",
+   "name": "Terrace & Northwest BC",
+   "description": "483 km (300 mi) around Terrace: Prince Rupert, Kitimat, Smithers, Stewart, Haida Gwaii coast",
+   "built": "2026-10-19",
+   "center": [
+    54.5163,
+    -128.6035
+   ],
+   "radiusKm": 483,
+   "files": [
+    {
+     "kind": "contours",
+     "name": "terrace-contours.pmtiles",
+     "url": "regions/terrace/2026-10-19/terrace-contours.pmtiles",
+     "size": 22353902,
+     "sha256": "f45b0d197142126c9319f5706ec6c33bb286e5004dd869db541dc2a62d129876",
+     "optional": true
+    },
+    {
+     "kind": "map",
+     "name": "terrace-map.pmtiles.part1",
+     "url": "regions/terrace/2026-10-19/terrace-map.pmtiles.part1",
+     "size": 209715200,
+     "sha256": "649b1fe611bb20595e83a1a1de064b9b85b58313b30dfc16d49ba3b291f0b9a7",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "terrace-map.pmtiles.part2",
+     "url": "regions/terrace/2026-10-19/terrace-map.pmtiles.part2",
+     "size": 209715200,
+     "sha256": "cdb87427d46d936910c37ed011d08ad50c509a04be528a38f8cf50bffddb62f6",
+     "optional": false
+    },
+    {
+     "kind": "map",
+     "name": "terrace-map.pmtiles.part3",
+     "url": "regions/terrace/2026-10-19/terrace-map.pmtiles.part3",
+     "size": 78581828,
+     "sha256": "253cf362ea742c865420954a1d8c47cbbaf9f62cfbc86d0b00bfa8da2ab57c89",
+     "optional": false
+    },
+    {
+     "kind": "routing",
+     "name": "terrace-routing.tar",
+     "url": "regions/terrace/2026-10-19/terrace-routing.tar",
+     "size": 25047040,
+     "sha256": "74c99ee1c1eeedc2915e8d033581fea17e784e99c5572177cfa533273a210b79",
+     "optional": false
+    },
+    {
+     "kind": "search",
+     "name": "terrace-search.db",
+     "url": "regions/terrace/2026-10-19/terrace-search.db",
+     "size": 18243584,
+     "sha256": "14833041f94252ebb37ece04fba511d16a50dd6efa28250d5957d6ea04afeb0f",
+     "optional": false
+    },
+    {
+     "kind": "terrain",
+     "name": "terrace-terrain.pmtiles.part1",
+     "url": "regions/terrace/2026-10-19/terrace-terrain.pmtiles.part1",
+     "size": 209715200,
+     "sha256": "2e502e0be74873b5802ac7782919c9d4ab2891713cf566881b8434c3c96d2e22",
+     "optional": true
+    },
+    {
+     "kind": "terrain",
+     "name": "terrace-terrain.pmtiles.part2",
+     "url": "regions/terrace/2026-10-19/terrace-terrain.pmtiles.part2",
+     "size": 209715200,
+     "sha256": "e817d64f7119ccb53958d4c1b59477e4468e9c2b284647b0fb6d4bf634b47dd2",
+     "optional": true
+    },
+    {
+     "kind": "terrain",
+     "name": "terrace-terrain.pmtiles.part3",
+     "url": "regions/terrace/2026-10-19/terrace-terrain.pmtiles.part3",
+     "size": 144884940,
+     "sha256": "856998026d60377c8c9c327a0132771900c74cbf4cef302ec6a5b5dcb8a3ac89",
+     "optional": true
+    }
+   ]
+  }
+ ]
+}

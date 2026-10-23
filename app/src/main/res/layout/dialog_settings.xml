@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingHorizontal="24dp" android:paddingTop="8dp">
+
+        <TextView style="@style/SettingsHeader" android:text="@string/set_voice" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swVoice"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_voice_on" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:text="@string/set_volume" />
+        <SeekBar android:id="@+id/sbVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swSpeaker"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_speaker" />
+        <Button android:id="@+id/btnVoiceCheck" style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/voice_check" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swEarly"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_early" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swJunctions"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_junctions" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swRv"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_rv" />
+
+        <TextView style="@style/SettingsHeader" android:text="@string/set_route" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swHighways"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_avoid_highways" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swFerries"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_avoid_ferries" />
+        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/swUnpaved"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/set_avoid_unpaved" />
+
+        <TextView style="@style/SettingsHeader" android:text="@string/set_map" />
+        <RadioGroup android:id="@+id/rgTheme" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <RadioButton android:id="@+id/rbAuto" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/set_theme_auto" />
+            <RadioButton android:id="@+id/rbDay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/set_theme_day" />
+            <RadioButton android:id="@+id/rbNight" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/set_theme_night" />
+        </RadioGroup>
+
+        <TextView style="@style/SettingsHeader" android:text="@string/map_style" />
+        <RadioGroup android:id="@+id/rgStyle" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <RadioButton android:id="@+id/rbStandard" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/style_standard" />
+            <RadioButton android:id="@+id/rbTopo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/style_topo" />
+            <RadioButton android:id="@+id/rbGrey" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/style_grey" />
+        </RadioGroup>
+
+        <Button android:id="@+id/btnAbout" style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:layout_marginBottom="8dp" android:text="@string/about_title" />
+
+        <TextView android:id="@+id/versionText"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:paddingBottom="12dp"
+            android:textColor="#B8C4D6" android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>

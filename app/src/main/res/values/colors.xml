@@ -1,0 +1,11 @@
+<resources>
+    <color name="brand">#1E6FD9</color>
+    <color name="panel_bg">#E6111822</color>
+    <color name="panel_text">#FFFFFF</color>
+    <color name="panel_subtext">#B8C4D6</color>
+    <color name="accent">#2FD0FF</color>
+    <color name="banner_bg">#F01565C0</color>
+    <color name="banner_dark">#F0111822</color>
+    <color name="search_bg">#FF0C1430</color>
+    <color name="route_line">#1E88E5</color>
+</resources>

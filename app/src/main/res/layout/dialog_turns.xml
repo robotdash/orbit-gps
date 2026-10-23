@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:background="@color/search_bg" android:orientation="vertical">
+    <TextView android:id="@+id/turnsTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingHorizontal="20dp" android:paddingTop="18dp" android:paddingBottom="4dp"
+        android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold" />
+    <TextView android:id="@+id/turnsSummary" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingHorizontal="20dp" android:paddingBottom="8dp"
+        android:textColor="@color/panel_subtext" android:textSize="14sp" />
+    <ListView android:id="@+id/turnsList" android:layout_width="match_parent" android:layout_height="420dp"
+        android:divider="#22FFFFFF" android:dividerHeight="1dp" />
+</LinearLayout>

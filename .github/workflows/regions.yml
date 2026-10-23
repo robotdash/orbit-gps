@@ -1,0 +1,98 @@
+# Builds Orbit GPS region packs (map, routing, search, terrain, contours) and publishes them to
+# maps.orbitgps.ca. Runs on the 2nd of every month for every region in tools/regions.txt, or by
+# hand (Actions → Build regions → Run workflow) for the regions you type.
+#
+# Secrets (Settings → Secrets and variables → Actions): CF_API_TOKEN (R2 edit), CF_ACCOUNT_ID.
+name: Build regions
+
+on:
+  schedule:
+    - cron: "17 9 2 * *"
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: "Codes separated by spaces (CA-AB US-WA ...), or 'all' for tools/regions.txt"
+        default: "all"
+      kinds:
+        description: "Only publish these kinds (map,routing,search,terrain,contours); empty = all"
+        default: ""
+      publish:
+        description: "Upload and update the catalog (untick for a test build)"
+        type: boolean
+        default: true
+
+concurrency: regions   # never two runs editing the catalog at once
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      regions: ${{ steps.r.outputs.regions }}
+      sources: ${{ steps.s.outputs.sources }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: r
+        run: |
+          want="${{ github.event.inputs.regions || 'all' }}"
+          [ "$want" = all ] && want=$(grep -v '^#' tools/regions.txt | cut -d' ' -f1 | xargs)
+          echo "regions=$(printf '%s\n' $want | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+      - id: s
+        run: echo "sources=$(python3 tools/latest_sources.py | paste -sd' ')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 4          # be gentle with Geofabrik and Overture
+      matrix:
+        region: ${{ fromJson(needs.plan.outputs.regions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space (the runner has ~14 GB free; big states need more)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+      - name: Tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          pip install --quiet duckdb shapely pyproj numpy osmium pyvalhalla==3.6.3 pmtiles scipy scikit-image mapbox-vector-tile pillow
+          curl -sSL https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin pmtiles
+      - name: Build ${{ matrix.region }}
+        run: |
+          export ${{ needs.plan.outputs.sources }} OSM_SOURCE=geofabrik
+          tools/build_region.sh ${{ matrix.region }} work
+      - name: Upload files
+        if: github.event.inputs.publish != 'false'
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          id=$(grep "^${{ matrix.region }} " tools/regions.txt | awk '{print $2}')
+          kinds="${{ github.event.inputs.kinds }}"
+          python3 tools/publish_region.py work/${{ matrix.region }} --entry-only ${id:+--id $id} ${kinds:+--kinds $kinds}
+          cp work/${{ matrix.region }}/entry.json entry-${{ matrix.region }}.json
+      - uses: actions/upload-artifact@v4
+        if: github.event.inputs.publish != 'false'
+        with:
+          name: entry-${{ matrix.region }}
+          path: entry-${{ matrix.region }}.json
+
+  catalog:
+    needs: build
+    if: ${{ always() && github.event.inputs.publish != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: entry-*
+          merge-multiple: true
+      - name: Add the finished regions to regions.json
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          ls entry-*.json >/dev/null 2>&1 || { echo "no region finished"; exit 1; }
+          python3 tools/publish_region.py --merge entry-*.json

@@ -1,0 +1,11 @@
+name = "orbit-spots"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+account_id = "9e5bff5e78686031dc3aabbeaaded948"
+
+routes = [{ pattern = "spots.orbitgps.ca", custom_domain = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "orbit-spots"
+database_id = "2f577ba8-e0f7-489b-96e7-06807250ecd8"

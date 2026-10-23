@@ -1,0 +1,5 @@
+# Regions the monthly GitHub build makes: CODE [catalog id, when it isn't the code in lower case]
+# BC ("bc") is still built by hand: it uses the BC Address Geocoder and BC rec sites. Compare
+# Overture's BC addresses with the Geocoder's before adding "CA-BC bc" here.
+CA-AB
+US-WA

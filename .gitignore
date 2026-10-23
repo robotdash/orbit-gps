@@ -1,0 +1,21 @@
+# build output
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+# private: signing key and its passwords, local paths, Cloudflare dev secrets
+keystore.properties
+*.jks
+*.keystore
+local.properties
+.dev.vars
+**/.dev.vars
+**/.wrangler/
+**/node_modules/
+# big test file (BC search, 270 MB)
+app/src/test/resources/search_terrace.db
+# tools scratch
+tools/__pycache__/
+tools/tmp/
+*.pyc

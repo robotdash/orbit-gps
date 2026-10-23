@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Direction to a place, drawn pointing up (= straight ahead); rotated in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp" android:height="32dp" android:viewportWidth="32" android:viewportHeight="32">
+    <path android:fillColor="#2FD0FF" android:pathData="M16,3 L26,27 L16,21 L6,27 Z" />
+</vector>

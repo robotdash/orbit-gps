@@ -1,5 +1,8 @@
-# Regions the monthly GitHub build makes: CODE [catalog id, when it isn't the code in lower case]
-# BC ("bc") is still built by hand: it uses the BC Address Geocoder and BC rec sites. Compare
-# Overture's BC addresses with the Geocoder's before adding "CA-BC bc" here.
-CA-AB
-US-WA
+# Regions the monthly GitHub build makes:  CODE [id=catalog id] [only=routing]
+#   id=          when the catalog id isn't the code in lower case
+#   only=routing BC's map and search are still built by hand (BC Address Geocoder addresses, BC rec
+#                sites; compare Overture's BC addresses before changing that), but its routing comes
+#                from the joint road network so BC routes join up with the other regions.
+CA-BC id=bc only=routing
+CA-AB id=ab
+US-WA id=wa

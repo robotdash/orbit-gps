@@ -9,6 +9,7 @@
 #     PROTOMAPS=20261021          Protomaps daily build (map display)
 #     OSM_CACHE=$WORKDIR/osm      downloaded OSM files (shared between regions)
 #     TOPO=1                      also build terrain + contours (0 to skip)
+#     ROUTING=1                   0: skip routing (GitHub makes it from the joint network, build_graph.sh)
 #
 # Every step is skipped if its output exists, so a rerun picks up where it stopped.
 # Output in WORKDIR/CODE/out: map.pmtiles, routing.tar, search.db, terrain.pmtiles, contours.pmtiles
@@ -54,7 +55,7 @@ if [ ! -s "$R/region.osm.pbf" ]; then
 fi
 
 # 4. Routing (Valhalla 3.6.3, what the app's valhalla-mobile reads)
-if [ ! -s "$O/routing.tar" ]; then
+if [ "${ROUTING:-1}" = 1 ] && [ ! -s "$O/routing.tar" ]; then
   log "routing"; V=$R/valhalla; rm -rf "$V"; mkdir -p "$V"
   python3 -m valhalla.valhalla_build_config --mjolnir-tile-dir "$V/tiles" --mjolnir-admin "$V/admins.sqlite" > "$V/valhalla.json"
   python3 -m valhalla valhalla_build_admins -c "$V/valhalla.json" "$R/region.osm.pbf"

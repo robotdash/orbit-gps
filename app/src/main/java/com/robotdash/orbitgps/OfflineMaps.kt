@@ -43,7 +43,8 @@ object OfflineMaps {
     private fun regionsDir(ctx: Context) = File(root(ctx), "r").also { migrate(ctx, it) }
     fun dir(ctx: Context, region: String) = File(regionsDir(ctx), region).apply { mkdirs() }
     fun file(ctx: Context, region: String, kind: Kind) = File(dir(ctx, region), kind.fileName)
-    fun has(ctx: Context, region: String, kind: Kind) = file(ctx, region, kind).let { it.exists() && it.length() > 1024 }
+    fun has(ctx: Context, region: String, kind: Kind) = file(ctx, region, kind).let { it.exists() && it.length() > 1024 } ||
+        (kind == Kind.ROUTING && RoadNetwork.has(ctx, region))   // unpacked into the shared road network
 
     /** Regions with at least one file on the phone. */
     fun regions(ctx: Context): List<String> =
@@ -56,7 +57,10 @@ object OfflineMaps {
     fun hasOfflineMap(ctx: Context) = has(ctx, Kind.MAP)
 
     /** Remove a region from the phone. */
-    fun deleteRegion(ctx: Context, region: String) { File(regionsDir(ctx), region).deleteRecursively() }
+    fun deleteRegion(ctx: Context, region: String) {
+        RoadNetwork.release(ctx, region)
+        File(regionsDir(ctx), region).deleteRecursively()
+    }
 
     /**
      * 3.3 and earlier kept one set of files directly in maps/. Move them into the folder of the
@@ -237,6 +241,7 @@ object OfflineMaps {
             }
             if (dest.exists()) dest.delete()
             check(tmp.renameTo(dest)) { "Couldn't save the ${kind.label} file." }
+            if (kind == Kind.ROUTING) RoadNetwork.absorb(ctx, region)    // join it to the other regions' roads
             installed += kind
         }
         installed

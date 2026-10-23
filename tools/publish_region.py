@@ -84,6 +84,7 @@ def main():
     ap.add_argument("--description"); ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--entry-only", action="store_true"); ap.add_argument("--merge", nargs="+")
     ap.add_argument("--prune", nargs="+", metavar="ID", help="only delete old builds of these regions")
+    ap.add_argument("--graph", help="the joint road-network build this routing.tar is a piece of")
     a = ap.parse_args()
     if a.prune: return prune(a.prune, [fetch_catalog()], a.dry_run)
     if a.merge: return merge([json.load(open(p)) for p in a.merge], a.dry_run)
@@ -116,6 +117,8 @@ def main():
                             f"All of {area['name']}, plus about 50 km around it so routes can cross the border.",
              "built": day, "center": [round((s + n) / 2, 2), round((w + e) / 2, 2)],
              "radiusKm": round(max(n - s, (e - w) * 0.6) * 111 / 2), "files": files, **outlines}
+    if "routing" in kinds and a.graph: entry["graph"] = a.graph
+    elif old and old.get("graph"): entry["graph"] = old["graph"]
     json.dump(dict(entry, published=kinds), open(os.path.join(a.region_dir, "entry.json"), "w"), indent=1)
     if a.entry_only: print(f"files up; entry saved for --merge"); return
     merge([dict(entry, published=kinds)], a.dry_run)
@@ -126,12 +129,19 @@ def merge(entries, dry_run=False):
     before = json.loads(json.dumps(cat))          # the catalog phones had until now
     regions = cat["regions"]
     for e in entries:
+        published = set(e.get("published") or {f["kind"] for f in e["files"]})
         e = {k: v for k, v in e.items() if k != "published"}
         old = next((r for r in regions if r["id"] == e["id"]), None)
         if old:
-            # keep kinds this build didn't publish at their old URLs
-            done = {f["kind"] for f in e["files"]}
-            e["files"] = [f for f in old["files"] if f["kind"] not in done] + e["files"]
+            # Only the kinds this entry published are new; the rest stay as the catalog has them now
+            # (the road-network job and the region job each publish part of a region).
+            order = list(FILES)
+            e["files"] = sorted([f for f in old["files"] if f["kind"] not in published] +
+                                [f for f in e["files"] if f["kind"] in published],
+                                key=lambda f: (order.index(f["kind"]), f["name"]))
+            if "routing" not in published:
+                e.pop("graph", None)
+                if old.get("graph"): e["graph"] = old["graph"]
             regions[regions.index(old)] = e
         else:
             regions.append(e)

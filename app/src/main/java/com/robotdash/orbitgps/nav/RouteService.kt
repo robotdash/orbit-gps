@@ -2,6 +2,7 @@ package com.robotdash.orbitgps.nav
 
 import android.content.Context
 import com.robotdash.orbitgps.OfflineMaps
+import com.robotdash.orbitgps.RoadNetwork
 import com.valhalla.valhalla.Valhalla
 import com.valhalla.valhalla.config.ValhallaConfigFactory
 import org.json.JSONArray
@@ -17,7 +18,7 @@ import java.util.concurrent.Executors
 class RouteService(private val ctx: Context) {
 
     private val worker = Executors.newSingleThreadExecutor()
-    private val engines = HashMap<String, Valhalla>()        // region -> loaded road network (worker thread only)
+    private val engines = HashMap<String, Valhalla>()        // router key -> loaded road network (worker thread only)
     @Volatile var loadError: String? = null
         private set
     /** Where the last route was planned from (warm-up loads that region's roads first). */
@@ -31,15 +32,16 @@ class RouteService(private val ctx: Context) {
         worker.execute { runCatching { engine(pick(listOfNotNull(near)) ?: return@execute) } }
     }
 
-    private fun engine(region: String): Valhalla? {
-        engines[region]?.let { return it }
+    private fun engine(key: String): Valhalla? {
+        engines[key]?.let { return it }
         return try {
-            val tar = OfflineMaps.file(ctx, region, OfflineMaps.Kind.ROUTING).absolutePath
-            val config = ValhallaConfigFactory.usingTileExtract(tar)
+            val config = if (key.startsWith(GRAPH))
+                ValhallaConfigFactory.usingTilesDir(RoadNetwork.dir(ctx, key.removePrefix(GRAPH)).absolutePath)
+            else ValhallaConfigFactory.usingTileExtract(OfflineMaps.file(ctx, key, OfflineMaps.Kind.ROUTING).absolutePath)
             Valhalla(ctx, config).also {
                 // Keep at most two road networks loaded (each maps a few hundred MB of tiles).
                 if (engines.size >= 2) engines.keys.first().let { k -> engines.remove(k)?.close() }
-                engines[region] = it; loadError = null
+                engines[key] = it; loadError = null
             }
         } catch (t: Throwable) {
             loadError = t.message ?: t.javaClass.simpleName
@@ -51,24 +53,50 @@ class RouteService(private val ctx: Context) {
     class CrossesRegions(msg: String) : Exception(msg)
 
     /**
-     * The region to route [points] with: one whose area (region + 50 km) holds them all,
-     * preferring the one whose province/state holds the most of them. Regions loaded by hand
-     * have no outline and are used when no outlined region fits.
+     * A road network that can route a trip: one region's own routing.tar, or the shared network
+     * of every region whose routing came from the same joint build ([RoadNetwork]).
+     * [areas]: each member region's area (region + 50 km), null when unknown (loaded by hand).
      */
-    internal fun pick(points: List<Pt>): String? = pick(points, OfflineMaps.regions(ctx)
-        .filter { OfflineMaps.has(ctx, it, OfflineMaps.Kind.ROUTING) }
-        .map { it to com.robotdash.orbitgps.RegionDownloads.shapes(ctx, it) })
+    data class Router(val key: String, val areas: List<Outline?>, val cores: List<Outline?>) {
+        val outlined get() = areas.none { it == null }
+        fun holds(p: Pt) = areas.any { it != null && p in it }
+        fun inCore(p: Pt) = cores.any { it != null && p in it }
+    }
+
+    internal fun routers(): List<Router> {
+        val regions = OfflineMaps.regions(ctx).filter { OfflineMaps.has(ctx, it, OfflineMaps.Kind.ROUTING) }
+        val shapes = regions.associateWith { com.robotdash.orbitgps.RegionDownloads.shapes(ctx, it) }
+        val joined = regions.groupBy { RoadNetwork.graphOf(ctx, it) }
+        return joined.flatMap { (graph, members) ->
+            if (graph == null) members.map { Router(it, listOf(shapes[it]!!.first), listOf(shapes[it]!!.second)) }
+            else listOf(Router(GRAPH + graph, members.map { shapes[it]!!.first }, members.map { shapes[it]!!.second }))
+        }
+    }
+
+    /** The road network to route [points] with (see [pick] below). */
+    internal fun pick(points: List<Pt>): String? = pick(points, routers())
 
     companion object {
-        internal fun pick(points: List<Pt>, regions: List<Pair<String, Pair<Outline?, Outline?>>>): String? {
-            if (regions.isEmpty()) return null
-            if (points.isEmpty()) return regions.first().first
-            val outlined = regions.filter { it.second.first != null }
-            val fits = outlined.filter { (_, s) -> points.all { it in s.first!! } }
-            if (fits.isNotEmpty()) return fits.maxBy { (_, s) -> points.count { p -> s.second?.contains(p) == true } }.first
-            return regions.firstOrNull { it.second.first == null }?.first
-                ?: regions.maxBy { (_, s) -> points.count { it in s.first!! } }.first   // best try; may fail at the edge
+        private const val GRAPH = "graph:"
+
+        /**
+         * The network that holds the whole trip (every point within one of its regions' areas),
+         * preferring the one whose provinces/states hold the most points. A network with a region
+         * loaded by hand (no outline) is used when no outlined one fits.
+         */
+        internal fun pick(points: List<Pt>, routers: List<Router>): String? {
+            if (routers.isEmpty()) return null
+            if (points.isEmpty()) return routers.first().key
+            val fits = routers.filter { r -> r.outlined && points.all { r.holds(it) } }
+            if (fits.isNotEmpty()) return fits.maxBy { r -> points.count { r.inCore(it) } }.key
+            return routers.firstOrNull { !it.outlined }?.key
+                ?: routers.maxBy { r -> points.count { r.holds(it) } }.key   // best try; may fail at the edge
         }
+
+        /** One region per network (tests, and regions with their own routing.tar). */
+        @JvmName("pickRegions")
+        internal fun pick(points: List<Pt>, regions: List<Pair<String, Pair<Outline?, Outline?>>>): String? =
+            pick(points, regions.map { (id, s) -> Router(id, listOf(s.first), listOf(s.second)) })
     }
 
     /** A route starting further than this from the car didn't start where the car is. */
@@ -149,12 +177,11 @@ class RouteService(private val ctx: Context) {
      * If [points] go outside [region]'s area but each lies in some downloaded region, the trip
      * crosses between regions, which needs road networks built together (not yet): say so.
      */
-    private fun crossing(points: List<Pt>, region: String): String? {
-        val area = com.robotdash.orbitgps.RegionDownloads.shapes(ctx, region).first ?: return null
-        if (points.all { it in area }) return null
-        val others = OfflineMaps.regions(ctx).filter { it != region }
-            .mapNotNull { com.robotdash.orbitgps.RegionDownloads.shapes(ctx, it).first }
-        if (points.any { p -> p !in area && others.none { p in it } }) return null   // outside everything: normal error
+    private fun crossing(points: List<Pt>, key: String): String? {
+        val all = routers()
+        val mine = all.firstOrNull { it.key == key } ?: return null
+        if (!mine.outlined || points.all { mine.holds(it) }) return null
+        if (points.any { p -> all.none { it.holds(p) } }) return null   // outside everything: normal error
         return ctx.getString(com.robotdash.orbitgps.R.string.route_crosses_regions)
     }
 

@@ -87,7 +87,7 @@ class MultiRegionTest {
         assertEquals("bc", RouteService.pick(listOf(terrace, edmonton, terrace), listOf(bc, ab)))
         // a region loaded by hand (no outline) is used when no outlined region fits
         assertEquals("files", RouteService.pick(listOf(terrace, edmonton), listOf(bc, ab, "files" to (null to null))))
-        assertNull(RouteService.pick(listOf(terrace), emptyList()))
+        assertNull(RouteService.pick(listOf(terrace), emptyList<RouteService.Router>()))
     }
 
     private fun searchDb(region: String, rows: List<Array<Any>>) {
@@ -138,6 +138,58 @@ class MultiRegionTest {
         assertEquals("bc", pick(vancouver, Pt(49.10, -122.30)))   // Vancouver - Abbotsford stays in BC
         assertTrue(pick(vancouver, bellingham) in setOf("bc", "wa"))
         assertTrue(all.none { it.id == "terrace" })
+    }
+
+    /** A routing.tar piece: graph.json then tiles (name -> bytes). */
+    private fun piece(graph: String?, tiles: Map<String, ByteArray>): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        fun entry(name: String, body: ByteArray) {
+            val h = ByteArray(512)
+            name.toByteArray().copyInto(h, 0)
+            "%011o\u0000".format(body.size).toByteArray().copyInto(h, 124)
+            h[156] = '0'.code.toByte()
+            "ustar\u000000".toByteArray().copyInto(h, 257)
+            "        ".toByteArray().copyInto(h, 148)
+            "%06o\u0000 ".format(h.sumOf { it.toInt() and 0xFF }).toByteArray().copyInto(h, 148)
+            out.write(h); out.write(body); out.write(ByteArray((512 - body.size % 512) % 512))
+        }
+        if (graph != null) entry("graph.json", """{"graph":"$graph","tiles":${tiles.size}}""".toByteArray())
+        tiles.forEach { (n, b) -> entry(n, b) }
+        out.write(ByteArray(1024))
+        return out.toByteArray()
+    }
+
+    private fun install(region: String, tar: ByteArray) {
+        val f = OfflineMaps.file(ctx, region, OfflineMaps.Kind.ROUTING)
+        f.writeBytes(tar)
+        RoadNetwork.absorb(ctx, region)
+    }
+
+    @Test fun roadPiecesJoinAndComeApart() {
+        File(ctx.filesDir, "maps").deleteRecursively()
+        val big = ByteArray(3000) { 7 }
+        install("bc", piece("na-1", mapOf("0/003/015.gph" to big, "2/000/700/001.gph" to big)))
+        install("ab", piece("na-1", mapOf("0/003/015.gph" to big, "2/000/700/002.gph" to big)))
+        assertEquals("na-1", RoadNetwork.graphOf(ctx, "ab"))
+        assertTrue("tar replaced by the shared folder", !OfflineMaps.file(ctx, "ab", OfflineMaps.Kind.ROUTING).exists())
+        assertTrue(OfflineMaps.has(ctx, "ab", OfflineMaps.Kind.ROUTING))
+        val d = RoadNetwork.dir(ctx, "na-1")
+        assertEquals(3, d.walk().count { it.name.endsWith(".gph") })
+        // both regions route as one network
+        val bcArea = box(-139.0, 48.0, -113.5, 60.5); val abArea = box(-120.9, 48.5, -109.1, 60.5)
+        val joined = RouteService.Router("graph:na-1", listOf(bcArea, abArea), listOf(null, null))
+        assertEquals("Terrace to Edmonton across two regions", "graph:na-1",
+            RouteService.pick(listOf(Pt(54.52, -128.60), Pt(53.55, -113.49)), listOf(joined)))
+        // removing BC keeps the tile Alberta shares
+        RegionDownloads.remove(ctx, "bc")
+        assertTrue(File(d, "0/003/015.gph").exists()); assertTrue(File(d, "2/000/700/002.gph").exists())
+        assertFalse(File(d, "2/000/700/001.gph").exists())
+        RegionDownloads.remove(ctx, "ab")
+        assertFalse("nothing left", d.exists())
+        // an older self-contained routing.tar stays as it is
+        install("wa", piece(null, mapOf("2/000/600/001.gph" to big)))
+        assertNull(RoadNetwork.graphOf(ctx, "wa"))
+        assertTrue(OfflineMaps.file(ctx, "wa", OfflineMaps.Kind.ROUTING).exists())
     }
 
     @Test fun catalogOutlinesAreKept() {

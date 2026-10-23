@@ -1858,7 +1858,8 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
         BigMenu.show(this, r.name, listOf(
             BigMenu.Choice(getString(R.string.dl_update_or_topo), "⬇", st.summary),
             BigMenu.Choice(getString(R.string.dl_remove), "🗑", getString(R.string.dl_remove_detail,
-                RegionDownloads.sizeText(OfflineMaps.dir(this, r.id).listFiles().orEmpty().sumOf { it.length() })), danger = true),
+                RegionDownloads.sizeText(OfflineMaps.dir(this, r.id).listFiles().orEmpty().sumOf { it.length() } +
+                    RoadNetwork.size(this, r.id))), danger = true),
         ), cancelLabel = getString(R.string.close)) { i ->
             if (i == 0) regionDownloadMenu(r) else confirmRemove(r.id, r.name)
         }
@@ -2048,7 +2049,9 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
                 }
             )
             val extra = if (!has) "" else buildString {
-                append("  (").append(f.length() / 1_000_000).append(" MB")
+                val bytes = if (k == OfflineMaps.Kind.ROUTING && RoadNetwork.has(this@MainActivity, region))
+                    RoadNetwork.size(this@MainActivity, region) else f.length()
+                append("  (").append(bytes / 1_000_000).append(" MB")
                 if (k == OfflineMaps.Kind.SEARCH && searchInfo != null) {
                     searchInfo.addresses?.let { append(", ").append(String.format(java.util.Locale.CANADA, "%,d", it)).append(" addresses") }
                     searchInfo.built?.let { append(", built ").append(it) }

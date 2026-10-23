@@ -300,5 +300,5 @@
     <string name="dl_remove_q_detail">Its map, roads, search and Topo files will be deleted from this phone. Your saved places and favourites stay.</string>
     <string name="dl_removed">%1$s removed</string>
     <string name="dl_remove_driving">Stop navigating first, then remove it.</string>
-    <string name="route_crosses_regions">This trip goes from one downloaded region into another. Routes across regions are coming in a later update; for now, route to a place near the border, then on from there.</string>
+    <string name="route_crosses_regions">This trip goes from one downloaded region into another, but their road data come from different builds and can\'t be joined yet. Update both regions under ☰ → Offline maps, then try again.</string>
 </resources>

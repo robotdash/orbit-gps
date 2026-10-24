@@ -36,6 +36,10 @@ def main():
     cache = {}
 
     def dem(z, x, y):
+        # Alaska's Aleutians cross 180°: x wraps around; rows off the top/bottom don't exist.
+        n = 1 << z
+        if not 0 <= y < n: return None
+        x %= n
         k = (z, x, y)
         if k not in cache:
             b = r.get(z, x, y)

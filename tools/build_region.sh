@@ -84,7 +84,9 @@ fi
 
 # 6. Topo: terrain (z0-11) and contours over the region + 10 km
 if [ "$TOPO" = 1 ]; then
-  [ -s "$O/terrain.pmtiles" ] || { log "terrain"; python3 "$T/fetch_tiles.py" dem-area "$R/buf10.geojson" 11 "$O/tmp-terrain.pmtiles" && mv "$O/tmp-terrain.pmtiles" "$O/terrain.pmtiles"; }
+  # Huge regions (over 1.4 million km²: Nunavut, Alaska, Quebec) one zoom less: z11 made Nunavut's Topo 8.4 GB.
+  TZ=$(python3 -c "import json;print(10 if json.load(open('$R/area.json'))['km2'] > 1_400_000 else 11)")
+  [ -s "$O/terrain.pmtiles" ] || { log "terrain (z0-$TZ)"; python3 "$T/fetch_tiles.py" dem-area "$R/buf10.geojson" "$TZ" "$O/tmp-terrain.pmtiles" && mv "$O/tmp-terrain.pmtiles" "$O/terrain.pmtiles"; }
   [ -s "$O/contours.pmtiles" ] || { log "contours"; python3 "$T/make_contours.py" "$O/terrain.pmtiles" "$O/tmp-contours.pmtiles" && mv "$O/tmp-contours.pmtiles" "$O/contours.pmtiles"; }
 fi
 log "done: $(cd "$O" && ls -s --block-size=M | tr '\n' ' ')"

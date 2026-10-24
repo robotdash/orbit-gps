@@ -40,6 +40,13 @@ if [ ! -s "$G/roads.osm.pbf" ]; then
   ls -la "$G/roads.osm.pbf"
 fi
 
+# Region outlines (Overture queries, ~30 s each) in the background while the network builds.
+areas() {
+  for c in $CODES; do echo "$c"; done | xargs -P 4 -I{} sh -c \
+    '[ -s "$0/{}/area.json" ] || python3 "$1/region_area.py" {} "$0/{}" "$2" >/dev/null' "$W" "$T" "$OVERTURE"
+}
+areas > "$W/areas.log" 2>&1 & AREAS=$!
+
 # 2. Valhalla
 if [ ! -s "$G/done" ]; then
   log "routing network ($(nproc) cores)"
@@ -53,11 +60,11 @@ if [ ! -s "$G/done" ]; then
   log "network: $(find "$G/tiles" -name '*.gph' | wc -l) tiles, $(du -sh "$G/tiles" | cut -f1)"
 fi
 
-# 3. One piece per region (region + 50 km)
-for c in $CODES; do
-  R=$W/$c; mkdir -p "$R/out"
-  [ -s "$R/area.json" ] || python3 "$T/region_area.py" "$c" "$R" "$OVERTURE" >/dev/null
-  python3 "$T/split_graph.py" "$G/tiles" "$GRAPH" "$R/buf50.geojson" "$R/out/routing.tar"
-done
+# 3. One piece per region (region + 50 km), 4 at a time
+wait $AREAS || true
+areas                                    # any outline that failed in the background, once more
+for c in $CODES; do echo "$c"; done | xargs -P 4 -I{} sh -c \
+  'mkdir -p "$0/{}/out" && python3 "$1/split_graph.py" "$2/tiles" "$3" "$0/{}/buf50.geojson" "$0/{}/out/routing.tar"' \
+  "$W" "$T" "$G" "$GRAPH"
 [ "${KEEP_TILES:-0}" = 1 ] || rm -rf "$G/tiles"
 log "done"

@@ -192,6 +192,21 @@ class MultiRegionTest {
         assertTrue(OfflineMaps.file(ctx, "wa", OfflineMaps.Kind.ROUTING).exists())
     }
 
+    @Test fun regionMenuShowsInstalledAndNearestFirst() {
+        fun r(id: String, lat: Double, lon: Double, country: String) =
+            RegionDownloads.Region(id, id.uppercase(), "", "d", emptyList(), center = Pt(lat, lon), country = country)
+        val all = listOf(r("bc", 54.0, -125.0, "CA"), r("ab", 54.5, -114.8, "CA"), r("on", 50.0, -85.0, "CA"),
+            r("wa", 47.3, -120.8, "US"), r("tx", 31.0, -99.0, "US"), r("id", 45.0, -114.6, "US"),
+            r("mt", 47.0, -109.6, "US"), r("yt", 64.0, -135.0, "CA"), r("ak", 64.0, -150.0, "US"))
+        val terrace = Pt(54.52, -128.60)
+        val (top, rest) = RegionDownloads.arrange(all, setOf("bc"), terrace, nearest = 3)
+        assertEquals("by distance to each middle", listOf("bc", "ab", "wa", "yt"), top.map { it.id })
+        assertEquals(listOf("ON"), rest["CA"]!!.map { it.name })
+        assertEquals("A-Z", listOf("AK", "ID", "MT", "TX"), rest["US"]!!.map { it.name })
+        // no location yet: just installed ones on top
+        assertEquals(listOf("bc"), RegionDownloads.arrange(all, setOf("bc"), null).first.map { it.id })
+    }
+
     @Test fun catalogOutlinesAreKept() {
         val text = """{"version":1,"regions":[{"id":"ab","name":"Alberta","built":"2026-10-22","files":[],
             "area":{"type":"Polygon","coordinates":[[[-120,48],[-109,48],[-109,61],[-120,61],[-120,48]]]}}]}"""

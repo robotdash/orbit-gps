@@ -45,7 +45,9 @@ object RegionDownloads {
      * Outlines as rings of lon/lat pairs (null in older catalogs); routing uses them to pick a region.
      */
     data class Region(val id: String, val name: String, val description: String, val built: String, val files: List<RegionFile>,
-                      val area: Outline? = null, val core: Outline? = null) {
+                      val area: Outline? = null, val core: Outline? = null,
+                      /** Middle of the region (for "nearest first"), and "CA" / "US". */
+                      val center: com.robotdash.orbitgps.nav.Pt? = null, val country: String = "") {
         fun files(withTopo: Boolean) = files.filter { withTopo || !it.optional }
         fun size(withTopo: Boolean) = files(withTopo).sumOf { it.size }
     }
@@ -63,8 +65,32 @@ object RegionDownloads {
                 (0 until fa.length()).map { j -> fileOf(fa.getJSONObject(j)) },
                 r.optJSONObject("area")?.let { Outline.fromGeoJson(it) },
                 r.optJSONObject("core")?.let { Outline.fromGeoJson(it) },
+                r.optJSONArray("center")?.let { c -> com.robotdash.orbitgps.nav.Pt(c.getDouble(0), c.getDouble(1)) },
+                r.optString("country").ifBlank { if (r.getString("id") in CANADA) "CA" else "US" },
             )
         }
+    }
+
+    /** Canadian region ids (older catalog entries have no "country"). */
+    private val CANADA = setOf("ab", "bc", "mb", "nb", "nl", "ns", "nt", "nu", "on", "pe", "qc", "sk", "yt", "terrace")
+
+    /**
+     * Regions in the order the menu shows them: [top] (installed, then the nearest to [here]) and
+     * the rest by country, A–Z. Distance is 0 inside a region's area, else to its middle.
+     */
+    fun arrange(regions: List<Region>, installed: Set<String>, here: com.robotdash.orbitgps.nav.Pt?, nearest: Int = 4):
+            Pair<List<Region>, Map<String, List<Region>>> {
+        fun dist(r: Region): Double = when {
+            here == null -> Double.MAX_VALUE
+            r.area?.contains(here) == true -> 0.0
+            r.center != null -> com.robotdash.orbitgps.nav.Geo.distance(here, r.center)
+            else -> Double.MAX_VALUE
+        }
+        val mine = regions.filter { it.id in installed }
+        val near = if (here == null) emptyList() else (regions - mine.toSet()).sortedBy { dist(it) }.take(nearest)
+        val top = mine.sortedBy { dist(it) } + near
+        val rest = (regions - top.toSet()).groupBy { it.country }.mapValues { (_, l) -> l.sortedBy { it.name } }
+        return top to rest
     }
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("regions", Context.MODE_PRIVATE)

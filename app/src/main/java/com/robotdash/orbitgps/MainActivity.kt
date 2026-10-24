@@ -1765,11 +1765,24 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
             tiles += BigMenu.Choice(getString(R.string.dl_in_progress, dl.job.regionName), "⬇", downloadDetail(dl))
             actions += { downloadMenu() }
         }
-        catalog.orEmpty().forEach { r ->
+        // Installed regions and the nearest few first; the rest under "More in Canada / the US".
+        val here = (core.lastShown ?: core.lastFix)?.let { com.robotdash.orbitgps.nav.Pt(it.latitude, it.longitude) }
+        val on = OfflineMaps.regions(this).toSet() + listOfNotNull(dl?.job?.regionId)
+        val (top, rest) = RegionDownloads.arrange(catalog.orEmpty(), on, here)
+        fun regionTile(r: RegionDownloads.Region): Pair<BigMenu.Choice, () -> Unit> {
             val st = regionState(r)
             val detail = if (dl?.job?.regionId == r.id) getString(R.string.dl_detail_downloading) else st.summary
-            tiles += BigMenu.Choice(r.name, "🗺", detail, selected = st.baseOk)
-            actions += { if (st.baseOk || st.topoOk) regionOptions(r) else regionDownloadMenu(r) }
+            return BigMenu.Choice(r.name, "🗺", detail, selected = st.baseOk) to
+                { if (st.baseOk || st.topoOk) regionOptions(r) else regionDownloadMenu(r) }
+        }
+        top.forEach { r -> regionTile(r).let { (c, act) -> tiles += c; actions += act } }
+        for ((country, list) in rest.toSortedMap()) {
+            val name = getString(if (country == "CA") R.string.dl_more_canada else R.string.dl_more_us)
+            tiles += BigMenu.Choice(name, if (country == "CA") "🍁" else "🦅", getString(if (country == "CA") R.string.dl_more_detail_ca else R.string.dl_more_detail_us, list.size))
+            actions += {
+                val picks = list.map { regionTile(it) }
+                BigMenu.show(this, name, picks.map { it.first }, cancelLabel = getString(R.string.close)) { picks[it].second() }
+            }
         }
         // Files picked by hand (not from the list above).
         if (OfflineMaps.HAND in searchInfo.keys) {

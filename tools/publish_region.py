@@ -163,7 +163,7 @@ def main():
     files.sort(key=lambda f: (order.index(f["kind"]), f["name"]))
     w, s, e, n = area["bbox50"]
     outlines = {k: outline(os.path.join(a.region_dir, f)) for k, f in (("area", "buf50.geojson"), ("core", "boundary.geojson"))}
-    entry = {"id": rid, "name": area["name"],
+    entry = {"id": rid, "name": area["name"], "country": area["code"].split("-")[0],
              "description": a.description or (old or {}).get("description") or
                             f"All of {area['name']}, plus about 50 km around it so routes can cross the border.",
              "built": day, "center": [round((s + n) / 2, 2), round((w + e) / 2, 2)],

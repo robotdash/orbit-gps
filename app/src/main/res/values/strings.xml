@@ -301,4 +301,8 @@
     <string name="dl_removed">%1$s removed</string>
     <string name="dl_remove_driving">Stop navigating first, then remove it.</string>
     <string name="route_crosses_regions">This trip goes from one downloaded region into another, but their road data come from different builds and can\'t be joined yet. Update both regions under ☰ → Offline maps, then try again.</string>
+    <string name="dl_more_canada">More in Canada</string>
+    <string name="dl_more_us">More in the United States</string>
+    <string name="dl_more_detail_ca">%1$d more provinces and territories</string>
+    <string name="dl_more_detail_us">%1$d more states</string>
 </resources>

@@ -100,6 +100,9 @@ object NavCore {
     fun removeListener(l: Listener) { listeners -= l }
     private fun changed() = listeners.toList().forEach { it.onStateChanged() }
 
+    /** A display choice changed (e.g. 3D view): screens redraw. */
+    fun notifyStateChanged() = changed()
+
     // ---------------------------------------------------------------- GPS holders
 
     private val holders = mutableSetOf<String>()

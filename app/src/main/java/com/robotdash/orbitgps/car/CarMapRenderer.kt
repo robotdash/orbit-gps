@@ -65,7 +65,9 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
     private val smoother = PoseSmoother()
 
     /** The current map picture and the camera it was taken with. */
-    private class Snap(val bitmap: Bitmap, val center: Pt, val bearing: Double, val zoom: Double, val key: String)
+    private class Snap(val bitmap: Bitmap, val center: Pt, val bearing: Double, val zoom: Double, val key: String,
+                       /** Pixels per dp the snapshot was drawn at (lower for very big 3D snapshots). */
+                       val ratio: Float)
     private var snap: Snap? = null
 
     /** Pixels per density-independent pixel on the car screen. */
@@ -173,23 +175,46 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
         return speed > 0.5
     }
 
-    private fun carCenter(proj: Projection, carPt: Pt, c: SurfaceContainer): Pt {
-        // Car arrow sits centred, ~70% down the visible area.
+    private val view3d get() = NavCore.settings.view3d
+
+    /** Where the car arrow sits: centred, ~70% down the visible area (78% in 3D, to show more road ahead). */
+    private fun carScreen(c: SurfaceContainer): Pair<Double, Double> {
         val va = visible ?: Rect(0, 0, c.width, c.height)
-        return proj.centerFor(carPt, va.exactCenterX() - c.width / 2.0, va.top + va.height() * 0.70 - c.height / 2.0)
+        return va.exactCenterX().toDouble() to va.top + va.height() * (if (view3d) 0.78 else 0.70)
     }
 
-    /** Side of the square snapshot, in screen pixels: covers the screen at any rotation, plus a margin. */
-    private fun snapSide(c: SurfaceContainer) = (hypot(c.width.toDouble(), c.height.toDouble()) * SNAP_COVER).toInt()
+    private fun carCenter(proj: Projection, carPt: Pt, c: SurfaceContainer): Pt {
+        val (x, y) = carScreen(c)
+        return proj.centerFor(carPt, x - c.width / 2.0, y - c.height / 2.0)
+    }
+
+    /** The 3D lean for this screen (null when flat). */
+    private fun tilt(c: SurfaceContainer): Tilt? = if (!view3d) null else
+        carScreen(c).let { (x, y) -> Tilt(TILT_3D, x, y, c.height * CAMERA_DIST) }
+
+    /**
+     * Where (on the flat map, in screen pixels) the snapshot is centred: the screen's middle, or in
+     * 3D the middle of the stretch the screen shows, which is mostly ahead of the car. (Centred on
+     * the screen, a 3D snapshot reached so far behind the car that the perspective broke down.)
+     */
+    private fun snapMiddle(c: SurfaceContainer): Pair<Double, Double> =
+        tilt(c)?.shownMiddle(c.width, c.height) ?: (c.width / 2.0 to c.height / 2.0)
+
+    private fun snapBox(c: SurfaceContainer) = snapBox(c.width, c.height, tilt(c))
+
+    /** The map point at flat screen position (x, y) for a camera centred on [center]. */
+    private fun pointAt(proj: Projection, center: Pt, c: SurfaceContainer, x: Double, y: Double): Pt =
+        proj.centerFor(center, c.width / 2.0 - x, c.height / 2.0 - y)
 
     private fun needsNewSnapshot(s: Snap, proj: Projection, center: Pt, bearing: Double, key: String, c: SurfaceContainer): Boolean {
         if (s.key != key) return true
-        if (abs(Geo.normalize(bearing - s.bearing)) > 25) return true
+        if (abs(Geo.normalize(bearing - s.bearing)) > (if (view3d) REFRESH_TURN_3D else REFRESH_TURN)) return true
         if (abs(zoom - s.zoom) > 0.35) return true
         // How far the snapshot's centre has drifted from the screen centre, vs. the spare margin.
         val (x, y) = proj.toScreen(s.center, center)
-        val drift = hypot(x - c.width / 2.0, y - c.height / 2.0)
-        val margin = (snapSide(c) - hypot(c.width.toDouble(), c.height.toDouble())) / 2
+        val (mx, my) = snapMiddle(c)
+        val drift = hypot(x - mx, y - my)
+        val margin = snapBox(c).margin
         return drift > margin * 0.5
     }
 
@@ -240,20 +265,25 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
         val carPt = carPt(p)
         val bearing = p?.bearing ?: 0.0
         val z = zoom
-        // Picture centred on today's screen centre (a little ahead of the car).
+        // Picture centred on what the screen shows now (a little ahead of the car; well ahead in 3D).
         val proj = Projection(z, bearing, ratio.toDouble(), c.width, c.height)
-        val center = carCenter(proj, carPt, c)
+        val (mx, my) = snapMiddle(c)
+        val center = pointAt(proj, carCenter(proj, carPt, c), c, mx, my)
         val night = night()
         val key = styleKey(night)
-        val sideDp = (snapSide(c) / ratio).toInt()
+        val box = snapBox(c)
+        val wDp = (2 * box.halfW / ratio).toInt(); val hDp = (2 * box.halfH / ratio).toInt()
+        // A 3D snapshot reaches far ahead and can be huge: past MAX_SNAP_PX pixels, draw it at a lower
+        // resolution (the far road is shrunk by the perspective anyway).
+        val pr = (ratio * (MAX_SNAP_PX / (2 * maxOf(box.halfW, box.halfH))).coerceAtMost(1.0)).toFloat()
 
         val cam = CameraPosition.Builder().target(LatLng(center.lat, center.lon)).zoom(z).bearing(bearing).tilt(0.0).build()
-        val skKey = "$sideDp:$key"
+        val skKey = "$wDp:$hDp:$pr:$key"
         var s = snapshotter
         if (s == null || skKey != snapshotterKey) {
             s?.cancel()
-            val opts = MapSnapshotter.Options(sideDp, sideDp)
-                .withPixelRatio(ratio)
+            val opts = MapSnapshotter.Options(wDp, hDp)
+                .withPixelRatio(pr)
                 .withStyleBuilder(styleBuilder(night))
                 .withCameraPosition(cam)
                 .withLogo(false)
@@ -263,7 +293,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
             s.setCameraPosition(cam)
         }
         s.start({ shot ->
-            snap = Snap(shot.bitmap, center, bearing, z, key)
+            snap = Snap(shot.bitmap, center, bearing, z, key, pr)
             main.post { gate.done(); frameSoon() } // after MapLibre has reset the snapshotter
         }, { err ->
             Log.w("OrbitCar", "map snapshot failed: $err")
@@ -286,6 +316,7 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
         style = Paint.Style.STROKE; color = Color.parseColor("#0C1430"); strokeJoin = Paint.Join.ROUND
     }
     private val mapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val horizon = Paint()
     private var useHardware = true
     private val matrix = Matrix()
 
@@ -300,9 +331,14 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
             try { surface.lockCanvas(null) } catch (e2: Exception) { return }
         }
         try {
-            canvas.drawColor(if (night) Color.parseColor("#1A2230") else Color.parseColor("#EBE8E3"))
+            val bg = if (night) Color.parseColor("#1A2230") else Color.parseColor("#EBE8E3")
+            canvas.drawColor(bg)
+            // 3D: everything on the map (picture, route, destination) is drawn flat, then leant back.
+            val lean = tilt(c)
+            canvas.save()
+            if (lean != null) canvas.concat(lean.matrix(c.width, c.height))
             if (map != null) {
-                val old = Projection(map.zoom, map.bearing, ratio.toDouble(), map.bitmap.width, map.bitmap.height)
+                val old = Projection(map.zoom, map.bearing, map.ratio.toDouble(), map.bitmap.width, map.bitmap.height)
                 val t = SnapTransform.between(old, map.center, proj, center, map.bitmap.width / 2.0, map.bitmap.height / 2.0)
                 matrix.reset()
                 t.applyTo(matrix)
@@ -326,12 +362,22 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
                 canvas.drawCircle(x, y, 10 * d, white)
                 canvas.drawCircle(x, y, 7 * d, destFill)
             }
-            // Car arrow (always pointing up: the map is heading-up).
-            val (ax, ay) = proj.toScreen(carPt, center)
+            canvas.restore()
+            if (lean != null) {
+                // Far away, the leant map gets busy and stops where the picture ends: fade it into the sky.
+                val band = c.height * 0.16f
+                horizon.shader = android.graphics.LinearGradient(0f, 0f, 0f, band, bg, bg and 0x00FFFFFF,
+                    android.graphics.Shader.TileMode.CLAMP)
+                canvas.drawRect(0f, 0f, c.width.toFloat(), band, horizon)
+            }
+            // Car arrow (always pointing up: the map is heading-up); squashed a little in 3D, lying on the road.
+            val (fx, fy) = proj.toScreen(carPt, center)
+            val (ax, ay) = lean?.map(fx.toDouble(), fy.toDouble())?.let { it.first.toFloat() to it.second.toFloat() } ?: (fx to fy)
             val s = 14 * d
+            val sy = if (lean != null) 0.75f else 1f
             val arrow = Path().apply {
-                moveTo(ax, ay - s); lineTo(ax + s * 0.75f, ay + s * 0.8f); lineTo(ax, ay + s * 0.35f)
-                lineTo(ax - s * 0.75f, ay + s * 0.8f); close()
+                moveTo(ax, ay - s * sy); lineTo(ax + s * 0.75f, ay + s * 0.8f * sy); lineTo(ax, ay + s * 0.35f * sy)
+                lineTo(ax - s * 0.75f, ay + s * 0.8f * sy); close()
             }
             arrowEdge.strokeWidth = 3 * d
             canvas.drawPath(arrow, arrowFill)
@@ -346,6 +392,84 @@ class CarMapRenderer(private val car: CarContext) : SurfaceCallback, NavCore.Lis
         const val IDLE_FRAME_MS = 500L
         /** Snapshot side = screen diagonal × this, so it can slide a while before needing a new one. */
         const val SNAP_COVER = 1.35
+        /** A new snapshot after this much turning (sooner in 3D, where the picture is much bigger). */
+        const val REFRESH_TURN = 25.0
+        const val REFRESH_TURN_3D = 15.0
+        /** How far the 3D view leans back. */
+        const val TILT_3D = 45.0
+        /** Virtual camera distance, in screen heights (larger = gentler perspective). */
+        const val CAMERA_DIST = 2.0
+        /** Largest snapshot side in pixels (GPU textures and memory). */
+        const val MAX_SNAP_PX = 3000.0
+
+        internal fun snapBox(w: Int, h: Int, lean: Tilt?): Box {
+            if (lean == null) {
+                val diag = hypot(w.toDouble(), h.toDouble())
+                return Box(diag * SNAP_COVER / 2, diag * SNAP_COVER / 2, diag * (SNAP_COVER - 1) / 2)
+            }
+            val (mx, my) = lean.shownMiddle(w, h)
+            val corners = listOf(0.0 to 0.0, w.toDouble() to 0.0, 0.0 to h.toDouble(), w.toDouble() to h.toDouble())
+                .map { (x, y) -> lean.unmap(x, y) }
+            val a = corners.maxOf { abs(it.first - mx) }; val b = corners.maxOf { abs(it.second - my) }
+            val f = Math.toRadians(REFRESH_TURN_3D)
+            val bigA = a * cos(f) + b * sin(f); val bigB = a * sin(f) + b * cos(f)
+            val m = 0.12 * maxOf(bigA, bigB)
+            return Box(bigA + m, bigB + m, m)
+        }
+    }
+
+    /**
+     * The map picture to take: half its width and height (screen pixels), centred on the middle of
+     * what the screen shows, and how far that can drift before a new one is needed. Flat: a square
+     * covering the screen at any rotation. 3D: a rectangle covering the (leant) stretch the screen
+     * shows, turned by up to [REFRESH_TURN_3D] degrees (a new picture is taken after more turning) —
+     * a square there reached so far behind the car on wide screens that the perspective broke.
+     */
+    internal data class Box(val halfW: Double, val halfH: Double, val margin: Double)
+
+    /**
+     * Leaning the flat map back by [deg] degrees around the car arrow at ([px], [py]), seen from a
+     * camera [dist] pixels away (like MapLibre's tilt: the road ahead shrinks into the distance,
+     * so more of it fits on the screen). Pure geometry, so it can be tested off the car.
+     */
+    internal class Tilt(val deg: Double, val px: Double, val py: Double, val dist: Double) {
+        private val t = Math.toRadians(deg)
+
+        /** Flat point → where it shows on screen. */
+        fun map(x: Double, y: Double): Pair<Double, Double> {
+            val dx = x - px; val dy = y - py
+            val k = dist / (dist - dy * sin(t))          // ahead (dy < 0) is further away: smaller
+            return (px + dx * k) to (py + dy * cos(t) * k)
+        }
+
+        /** Screen point → the flat point that shows there. */
+        fun unmap(sx: Double, sy: Double): Pair<Double, Double> {
+            val dyS = sy - py
+            val dy = dyS * dist / (dist * cos(t) + dyS * sin(t))
+            val k = dist / (dist - dy * sin(t))
+            return (px + (sx - px) / k) to (py + dy)
+        }
+
+        /** Middle of the flat stretch the screen shows (from the far top edge down to the bottom). */
+        fun shownMiddle(w: Int, h: Int): Pair<Double, Double> {
+            val top = unmap(px, 0.0).second
+            val bottom = unmap(px, h.toDouble()).second
+            return px to (top + bottom) / 2
+        }
+
+        /** Flat points further below the car than this would be behind the camera (perspective breaks). */
+        val safeBelow: Double get() = dist / sin(t)
+
+        /** The same lean as a canvas matrix (a perspective transform is fixed by 4 points). */
+        fun matrix(w: Int, h: Int): Matrix {
+            val src = floatArrayOf(0f, 0f, w.toFloat(), 0f, w.toFloat(), h.toFloat(), 0f, h.toFloat())
+            val dst = FloatArray(8)
+            for (i in 0 until 4) {
+                val (x, y) = map(src[2 * i].toDouble(), src[2 * i + 1].toDouble())
+                dst[2 * i] = x.toFloat(); dst[2 * i + 1] = y.toFloat()
+            }
+            return Matrix().apply { setPolyToPoly(src, 0, dst, 0, 4) }
+        }
     }
 
     /**

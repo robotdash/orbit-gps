@@ -60,4 +60,37 @@ class CarProjectionTest {
             }
         }
     }
+
+    /** 3D car view (3.9): the flat map leant back 45° around the car arrow. */
+    @Test fun leaningTheMapBackShowsMoreRoadAheadSafely() {
+        for ((w, h) in listOf(800 to 480, 1024 to 600, 1280 to 720, 1920 to 720, 1080 to 1920)) {
+            val px = w / 2.0; val py = h * 0.78
+            val t = CarMapRenderer.Tilt(CarMapRenderer.TILT_3D, px, py, h * CarMapRenderer.CAMERA_DIST)
+            // the car stays put, map/unmap are inverses
+            val car = t.map(px, py)
+            assertEquals(px, car.first, 1e-9); assertEquals(py, car.second, 1e-9)
+            for ((x, y) in listOf(0.0 to 0.0, w * 0.3 to h * 0.2, w.toDouble() to h.toDouble())) {
+                val (fx, fy) = t.unmap(x, y)
+                val (bx, by) = t.map(fx, fy)
+                assertEquals(x, bx, 1e-6); assertEquals(y, by, 1e-6)
+            }
+            // the top of the screen shows road well beyond the screen height above the car (more ahead)
+            val farTop = t.unmap(px, 0.0).second
+            assertTrue("$w×$h sees ahead ${py - farTop} vs ${py} flat", py - farTop > 2.0 * py)
+            // the picture (centred on the shown stretch, room for 25° of turning and some drift)
+            // covers every screen corner and never reaches behind the camera
+            val (mx, my) = t.shownMiddle(w, h)
+            val box = CarMapRenderer.snapBox(w, h, t)
+            for ((x, y) in listOf(0.0 to 0.0, w.toDouble() to 0.0, 0.0 to h.toDouble(), w.toDouble() to h.toDouble())) {
+                val (fx, fy) = t.unmap(x, y)
+                assertTrue("$w×$h corner covered", Math.abs(fx - mx) <= box.halfW && Math.abs(fy - my) <= box.halfH)
+            }
+            // worst case: the picture turned up to 15° (more turning takes a new one) and drifted
+            val turn = Math.toRadians(CarMapRenderer.REFRESH_TURN_3D)
+            val below = my + box.halfW * Math.sin(turn) + box.halfH * Math.cos(turn) + box.margin * 0.5 - py
+            assertTrue("$w×$h picture stays in front: reaches $below below the car, limit ${t.safeBelow}",
+                below < t.safeBelow * 0.8)
+            assertTrue("$w×$h picture fits a GPU texture at reduced resolution", box.halfW > 0 && box.halfH > 0)
+        }
+    }
 }

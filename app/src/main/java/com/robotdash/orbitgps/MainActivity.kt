@@ -81,6 +81,8 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
     companion object {
         /** Street level: the destination and the roads around it. */
         const val DEST_ZOOM = 15.0
+        /** Map tilt in the 3D driving view (MapLibre allows up to 60°). */
+        const val TILT_3D = 60.0
         const val ONLINE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
         const val ONLINE_STYLE_NIGHT_URL = "https://tiles.openfreemap.org/styles/dark"
         const val KOFI_URL = "https://ko-fi.com/dashorbit"
@@ -301,11 +303,18 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
         previewCard.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeButtons() }
 
         recenterBtn.setOnClickListener { follow() }
+        // The view button steps through: 3D (tilted, heading up) → flat heading up → north up.
         orientBtn.setOnClickListener {
-            headingUp = !headingUp
+            val s = core.settings
+            val msg = when {
+                headingUp && s.view3d -> { s.view3d = false; R.string.heading_up }
+                headingUp -> { headingUp = false; R.string.north_up }
+                else -> { headingUp = true; s.view3d = true; R.string.view_3d }
+            }
             orientBtn.setImageResource(if (headingUp) R.drawable.ic_heading_up else R.drawable.ic_north_up)
-            Toast.makeText(this, if (headingUp) R.string.heading_up else R.string.north_up, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             follow()
+            core.notifyStateChanged()        // the car screen follows the same 3D choice
         }
         findViewById<View>(R.id.menuBtn).setOnClickListener { showMainMenu() }
         findViewById<View>(R.id.searchClear).setOnClickListener { searchInput.setText("") }
@@ -544,12 +553,19 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
     private fun setCamera(pose: PoseSmoother.Pose) {
         val m = map ?: return
         val h = mapView.height.takeIf { it > 0 } ?: return
-        // With a junction picture showing, keep the car lower so the road ahead stays visible.
-        val topPad = if (headingUp) h * (if (junctionPanel.visibility == View.VISIBLE) 0.52 else 0.40) else 0.0
+        // The car sits low on the screen so the road ahead fills it; lower still in 3D and with a
+        // junction picture showing.
+        val tilted = headingUp && core.settings.view3d
+        val junction = junctionPanel.visibility == View.VISIBLE
+        val topPad = when {
+            !headingUp -> 0.0
+            tilted -> h * (if (junction) 0.58 else 0.50)
+            else -> h * (if (junction) 0.52 else 0.40)
+        }
         val pos = CameraPosition.Builder()
             .target(LatLng(pose.lat, pose.lon))
             .bearing(if (headingUp) pose.bearing else 0.0)
-            .tilt(if (headingUp) 50.0 else 0.0)
+            .tilt(if (tilted) TILT_3D else 0.0)
             .zoom(zoom)
             .padding(0.0, topPad, 0.0, 0.0)
             .build()

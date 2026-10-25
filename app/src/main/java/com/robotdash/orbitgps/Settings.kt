@@ -50,6 +50,11 @@ class Settings(ctx: Context) {
         set(v) = p.edit().putString("theme", v.name).apply()
 
     /** Show RV & van life place types (sani dumps, free camping, campgrounds, propane). */
+    /** Driving view leans back (3D) so more of the road ahead shows; phone and car screen. */
+    var view3d: Boolean
+        get() = p.getBoolean("view3d", true)
+        set(v) = p.edit().putBoolean("view3d", v).apply()
+
     var rvMode: Boolean
         get() = p.getBoolean("rvMode", false)
         set(v) = p.edit().putBoolean("rvMode", v).apply()

@@ -168,6 +168,7 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)
         setContentView(R.layout.activity_main)
+        keepClearOfSystemBars()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         bindViews()
 
@@ -633,6 +634,36 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
     private val pendingSearch = Runnable { runSearch(pendingText) }
     private var reopenSavedAfterPick = false
 
+    /**
+     * Android 15+ draws the app under the status bar and the gesture bar. Move the top bar, the
+     * turn banner and the search screen below the status bar (whatever its height: camera
+     * cut-outs make it taller), and the bottom panels above the gesture bar. Before this the
+     * "Where to?" bar sat a fixed 40 dp down, partly under the status bar, which took the taps
+     * (Oct 24: "I have to hit it several times").
+     */
+    private fun keepClearOfSystemBars() {
+        val d = resources.displayMetrics.density
+        fun px(dp: Int) = (dp * d).toInt()
+        val topMargins = listOf(R.id.searchBar to 8, R.id.quickChips to 8 + 60 + 6)
+            .map { (id, dp) -> findViewById<View>(id) to px(dp) }
+        val topPadding = listOf(R.id.navBanner to 10, R.id.searchPanel to 6).map { (id, dp) -> findViewById<View>(id) to px(dp) }
+        val bottoms = listOf(R.id.speedBox, R.id.fabColumn, R.id.previewCard).map { id ->
+            findViewById<View>(id).let { v -> v to (v.layoutParams as android.view.ViewGroup.MarginLayoutParams).bottomMargin }
+        }
+        val navBottom = findViewById<View>(R.id.navBottom)
+        val navBottomPad = navBottom.paddingBottom
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            for ((v, dp) in topMargins) (v.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = bars.top + dp
+            for ((v, dp) in topPadding) v.setPadding(v.paddingLeft, bars.top + dp, v.paddingRight, v.paddingBottom)
+            for ((v, m) in bottoms) (v.layoutParams as android.view.ViewGroup.MarginLayoutParams).bottomMargin = bars.bottom + m
+            navBottom.setPadding(navBottom.paddingLeft, navBottom.paddingTop, navBottom.paddingRight, bars.bottom + navBottomPad)
+            (topMargins.map { it.first } + topPadding.map { it.first } + bottoms.map { it.first } + navBottom).forEach { it.requestLayout() }
+            insets
+        }
+    }
+
     private fun openSearch(pick: PickFor? = null) {
         if (!core.search.available) {
             AlertDialog.Builder(this).setTitle(R.string.where_to).setMessage(R.string.search_missing)
@@ -1018,7 +1049,7 @@ class MainActivity : AppCompatActivity(), NavCore.Listener {
         // Below the turn banner while navigating, else where the shortcut chips are.
         (bar.layoutParams as android.widget.FrameLayout.LayoutParams).topMargin =
             if (core.mode == NavCore.Mode.NAVIGATING) navBanner.bottom + (8 * resources.displayMetrics.density).toInt()
-            else (102 * resources.displayMetrics.density).toInt()
+            else searchBar.bottom + (6 * resources.displayMetrics.density).toInt()
         bar.visibility = View.VISIBLE
         findViewById<View>(R.id.quickChips).visibility = View.GONE
         fitResults(rows)

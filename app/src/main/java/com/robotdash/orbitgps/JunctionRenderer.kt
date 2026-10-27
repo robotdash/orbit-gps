@@ -262,7 +262,7 @@ object JunctionRenderer {
 
             // Route arrow up the lane(s) to take, like the top-down pictures.
             val take = branchLaneIdx.filter { lanes[it].valid }.ifEmpty { branchLaneIdx.toList() }
-            routeArrow(branch[take.first()]!!, branch[take.last() + 1]!!, from = if (hasLanes) 0.3f else 0.06f)
+            routeArrow(branch[take.first()]!!, branch[take.last() + 1]!!, from = if (hasLanes) 0.42f else 0f)
 
             if (hasLanes) {
                 for (i in 0 until n) {
@@ -275,14 +275,14 @@ object JunctionRenderer {
         /**
          * Cyan arrow running up between lane edges [a] and [b]: shaft over the middle
          * third, then a head; perspective comes for free from the edges converging.
-         * [from] (0..1 up the edges) leaves room for lane arrows at the bottom.
+         * [from] (0..1 up the edges): 0 starts flush with the bottom of the picture;
+         * more leaves room for lane arrows painted there.
          */
-        fun routeArrow(a: Edge, b: Edge, from: Float = 0.06f) {
+        fun routeArrow(a: Edge, b: Edge, from: Float = 0f) {
             // A slim arrow down the middle of the lane(s): a narrow shaft that thins with
             // distance and a pointed head, outlined so it never reads as another road.
             val n = min(a.pts.size, b.pts.size) - 1
-            // Shorter than the lane: it sits in the middle third of the picture's depth.
-            val start = (n * (from + 0.12f)).toInt()
+            val start = (n * from).toInt()
             val tip = (n * 0.78f).toInt()
             val mid = (start..tip).map { k ->
                 val p = a.pts[k]; val q = b.pts[k]

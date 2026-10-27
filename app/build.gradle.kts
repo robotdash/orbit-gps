@@ -26,8 +26,8 @@ android {
         applicationId = "com.robotdash.orbitgps"
         minSdk = 26
         targetSdk = 36
-        versionCode = 44
-        versionName = "3.9"
+        versionCode = 45
+        versionName = "3.10"
         // The offline routing engine is built for 64-bit ARM (all phones from the last several years).
         ndk {
             abiFilters += "arm64-v8a"

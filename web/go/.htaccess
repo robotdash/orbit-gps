@@ -1,0 +1,11 @@
+# Orbit GPS web app (orbitgps.ca/go/)
+AddType application/manifest+json .webmanifest
+AddType application/javascript .js
+AddType audio/mpeg .mp3
+AddType application/x-protobuf .pbf
+<IfModule mod_headers.c>
+  # Always check for a new version of these (the app updates itself from them).
+  <FilesMatch "^(sw\.js|config\.json|index\.html|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

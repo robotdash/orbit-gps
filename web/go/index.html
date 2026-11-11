@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit GPS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Free GPS for Canada and the US with early turn warnings. Install it from Safari: Share, then Add to Home Screen.">
+<meta name="theme-color" content="#0C1430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Orbit GPS">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/favicon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="map"></div>
+
+<!-- Browse: Where to? bar, menu, quick categories -->
+<div id="top" class="top">
+  <button id="menuBtn" class="round" aria-label="Menu"></button>
+  <button id="whereBtn" class="where"><span class="ico" data-icon="ic_search"></span><span>Where to?</span></button>
+</div>
+
+<!-- Driving: turn banner -->
+<div id="banner" class="banner hidden">
+  <div class="turn"><span id="turnIcon" class="turnIcon"></span></div>
+  <div class="turnText"><div id="turnDist" class="dist"></div><div id="turnRoad" class="road"></div></div>
+  <div id="lanes" class="lanes hidden"></div>
+</div>
+<div id="thenBox" class="then hidden"><span>Then</span><span id="thenIcon" class="thenIcon"></span></div>
+
+<!-- Right-hand buttons -->
+<div id="side" class="side">
+  <button id="voiceBtn" class="fab hidden" aria-label="Voice"></button>
+  <button id="viewBtn" class="fab" aria-label="Map view"></button>
+  <button id="locBtn" class="fab" aria-label="My location"></button>
+</div>
+<div id="recenter" class="recenter hidden"><button id="recenterBtn">Re-centre</button></div>
+
+<!-- Driving: bottom bar -->
+<div id="driveBar" class="drivebar hidden">
+  <div id="speed" class="speed">0<small> km/h</small></div>
+  <div class="eta"><div id="eta" class="etaTime"></div><div id="remain" class="remain"></div></div>
+  <button id="stopBtn" class="stop">Stop</button>
+</div>
+
+<!-- Route preview card -->
+<div id="preview" class="sheet hidden">
+  <div class="sheetHead">
+    <div><div id="pvName" class="pvName"></div><div id="pvInfo" class="pvInfo"></div></div>
+    <button id="pvClose" class="iconBtn" aria-label="Close"></button>
+  </div>
+  <ol id="pvStops" class="stops"></ol>
+  <div id="pvMsg" class="msg hidden"></div>
+  <div class="row">
+    <button id="pvAdd" class="secondary">Add a stop</button>
+    <button id="goBtn" class="go">Go</button>
+  </div>
+</div>
+
+<!-- Place card (map long-press / result tap) -->
+<div id="place" class="sheet hidden">
+  <div class="sheetHead">
+    <div><div id="plName" class="pvName"></div><div id="plInfo" class="pvInfo"></div></div>
+    <button id="plClose" class="iconBtn" aria-label="Close"></button>
+  </div>
+  <div class="row">
+    <button id="plStop" class="secondary hidden">Add as a stop</button>
+    <button id="plGo" class="go">Go here</button>
+  </div>
+</div>
+
+<!-- Search screen -->
+<div id="search" class="search hidden">
+  <div class="searchBar">
+    <button id="searchBack" class="iconBtn dark" aria-label="Back"></button>
+    <input id="q" type="search" placeholder="Search places or addresses" autocomplete="off" autocorrect="off" enterkeyhint="search">
+  </div>
+  <div id="chips" class="chips"></div>
+  <div id="results" class="results"></div>
+</div>
+
+<!-- Menu -->
+<div id="menu" class="menu hidden">
+  <div class="menuPanel">
+    <div class="menuHead"><img src="icons/icon-192.png" alt=""><div><b>Orbit GPS</b><small>Web version for iPhone</small></div></div>
+    <label class="opt"><span>Voice directions</span><input type="checkbox" id="optVoice"></label>
+    <label class="opt"><span>Earlier warnings</span><input type="checkbox" id="optEarly"></label>
+    <div class="optHead">Routes</div>
+    <label class="opt"><span>Avoid highways</span><input type="checkbox" id="optHwy"></label>
+    <label class="opt"><span>Avoid ferries</span><input type="checkbox" id="optFerry"></label>
+    <label class="opt"><span>Avoid gravel roads</span><input type="checkbox" id="optUnpaved"></label>
+    <label class="opt"><span>Avoid tolls</span><input type="checkbox" id="optTolls"></label>
+    <div class="optHead">Map</div>
+    <label class="opt"><span>Colours</span>
+      <select id="optNight"><option value="auto">Day/night by the sun</option><option value="day">Always day</option><option value="night">Always night</option></select></label>
+    <button class="link" id="mInstall">Install on your iPhone</button>
+    <button class="link" id="mHelp">Tips for driving</button>
+    <button class="link" id="mClear">Clear the saved map</button>
+    <button class="link" id="mAbout">About and credits</button>
+  </div>
+</div>
+
+<!-- Messages -->
+<div id="dialog" class="dialog hidden"><div class="dialogBox"><div id="dialogBody"></div><button id="dialogOk" class="go">OK</button></div></div>
+<div id="toast" class="toast hidden"></div>
+<div id="installTip" class="installTip hidden">
+  <div><b>Install Orbit GPS</b><br>Tap <span class="share"></span> <b>Share</b>, then <b>Add to Home Screen</b>.</div>
+  <button id="installClose" class="iconBtn" aria-label="Close"></button>
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
